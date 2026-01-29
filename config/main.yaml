@@ -1,3 +1,6 @@
+server:
+  backend_port: 8001
+  frontend_port: 3782
 system:
   language: en
 paths:
@@ -17,12 +20,12 @@ tools:
   run_code:
     workspace: ./data/user/run_code_workspace
     allowed_roots:
-    - ./data/user
-    - ./src/tools
+      - ./data/user
+      - ./src/tools
   web_search:
     enabled: true
     consolidation: template
-    consolidation_template: ''
+    consolidation_template: ""
     provider: jina
   query_item:
     enabled: true
@@ -37,7 +40,20 @@ logging:
   rag_logger_names:
     knowledge_init: RAG-Init
     rag_tool: RAG
+tts:
+  default_voice: alloy
 question:
+  max_rounds: 10
+  question_generation:
+    max_iterations: 5
+    retrieve_top_k: 30
+  question_validation:
+    strict_mode: true
+
+  research:
+    researching:
+      max_iterations: 5
+      execution_mode: "parallel"
   # Refactored: no iteration loops (max_rounds removed)
   rag_query_count: 3
   max_parallel_questions: 1
