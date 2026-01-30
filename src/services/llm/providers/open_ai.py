@@ -17,10 +17,17 @@ class OpenAIProvider(BaseLLMProvider):
     def __init__(self, config):
         super().__init__(config)
 
+        # Create httpx client for better control
+        # Note: brotli must be installed for decompression of brotli-compressed responses
+        http_client_kwargs = {
+            "limits": httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        }
+
         # SSL handling for dev/troubleshooting
-        http_client = None
         if os.getenv("DISABLE_SSL_VERIFY", "").lower() in ("true", "1", "yes"):
-            http_client = httpx.AsyncClient(verify=False)
+            http_client_kwargs["verify"] = False
+
+        http_client = httpx.AsyncClient(**http_client_kwargs)
 
         self.client = openai.AsyncOpenAI(
             api_key=self.api_key,

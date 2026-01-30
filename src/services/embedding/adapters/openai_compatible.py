@@ -45,7 +45,12 @@ class OpenAICompatibleEmbeddingAdapter(BaseEmbeddingAdapter):
 
         logger.debug(f"Sending embedding request to {url} with {len(request.texts)} texts")
 
-        async with httpx.AsyncClient(timeout=self.request_timeout) as client:
+        # Create httpx client with explicit decompression support
+        # httpx will auto-decompress gzip, deflate, brotli (if brotli is installed)
+        async with httpx.AsyncClient(
+            timeout=self.request_timeout,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        ) as client:
             response = await client.post(url, json=payload, headers=headers)
 
             if response.status_code >= 400:

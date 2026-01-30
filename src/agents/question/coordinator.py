@@ -305,10 +305,19 @@ class AgentCoordinator:
 
         if not retrieval_result.get("has_content"):
             self.logger.warning("No relevant knowledge found")
+            
+            # Provide more informative error message
+            error_detail = (
+                f"Knowledge base '{self.kb_name}' does not contain relevant information "
+                f"for the knowledge point: {requirement.get('knowledge_point', 'Unknown')}. "
+                f"Attempted queries: {', '.join(retrieval_result.get('queries', [])[:3])}"
+            )
+            
             return {
                 "success": False,
                 "error": "knowledge_not_found",
                 "message": "Knowledge base does not contain relevant information.",
+                "detail": error_detail,
                 "search_queries": retrieval_result.get("queries", []),
             }
 
@@ -374,15 +383,20 @@ class AgentCoordinator:
             )
 
             if not gen_result.get("success"):
-                self.logger.error(f"Failed to generate question {question_id}")
+                error_msg = gen_result.get("error", "Unknown error")
+                self.logger.error(f"Failed to generate question {question_id}: {error_msg}")
                 failures.append(
                     {
                         "question_id": question_id,
-                        "error": gen_result.get("error", "Unknown error"),
+                        "error": error_msg,
                     }
                 )
                 await self._send_ws_update(
-                    "question_update", {"question_id": question_id, "status": "error"}
+                    "question_update", {
+                        "question_id": question_id,
+                        "status": "error",
+                        "error": error_msg,
+                    }
                 )
                 continue
 
