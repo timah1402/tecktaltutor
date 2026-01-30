@@ -570,6 +570,25 @@ async def create_knowledge_base(
 
         logger.info(f"Creating KB: {name}")
 
+        # Validate requested RAG provider availability early to give fast feedback
+        try:
+            from src.services.rag.factory import get_pipeline
+
+            # Try to instantiate the pipeline (may raise ValueError if optional deps missing)
+            try:
+                _ = get_pipeline(rag_provider, kb_base_dir=str(_kb_base_dir)) if rag_provider else None
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Requested RAG provider '{rag_provider}' is unavailable: {e}. "
+                        "Install the required optional dependency or choose 'raganything'."
+                    ),
+                )
+        except Exception:
+            # If factory import fails for any reason, continue — initialization will catch it later
+            pass
+
         # Register KB to kb_config.json immediately with "initializing" status
         # This ensures the KB appears in the list right away
         manager.update_kb_status(

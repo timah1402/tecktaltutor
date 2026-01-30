@@ -363,6 +363,41 @@ async def websocket_question_generate(websocket: WebSocket):
             f"[{task_id}] Starting question generation: {requirement.get('knowledge_point', 'Unknown')}"
         )
 
+        # Validate KB exists and is ready
+        try:
+            from src.knowledge.manager import get_kb_manager
+            
+            kb_manager = get_kb_manager()
+            available_kbs = kb_manager.list_knowledge_bases()
+            
+            if kb_name not in available_kbs:
+                error_msg = f"Knowledge base '{kb_name}' not found. Available KBs: {', '.join(available_kbs) or 'None'}"
+                try:
+                    await websocket.send_json({"type": "error", "content": error_msg})
+                except (RuntimeError, WebSocketDisconnect):
+                    pass
+                logger.warning(f"[{task_id}] {error_msg}")
+                return
+            
+            kb_info = kb_manager.get_info(kb_name)
+            kb_status = kb_info.get("status", "unknown")
+            
+            if kb_status != "ready":
+                error_msg = (
+                    f"Knowledge base '{kb_name}' is not ready (status: {kb_status}). "
+                    "Please ensure documents are uploaded and indexing is complete."
+                )
+                try:
+                    await websocket.send_json({"type": "error", "content": error_msg})
+                except (RuntimeError, WebSocketDisconnect):
+                    pass
+                logger.warning(f"[{task_id}] {error_msg}")
+                return
+                
+        except Exception as e:
+            logger.warning(f"[{task_id}] Failed to validate KB '{kb_name}': {e}")
+            # Continue anyway, let the retrieval agent handle missing KB
+
         # 2. Initialize Coordinator
         # Define unified output directory (DeepTutor/data/user/question)
         root_dir = Path(__file__).parent.parent.parent.parent

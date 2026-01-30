@@ -256,6 +256,17 @@ class KnowledgeBaseInitializer:
                     current=len(doc_files),
                     total=len(doc_files),
                 )
+                # Mark initialization as completed so KB status becomes 'ready'
+                try:
+                    self.progress_tracker.update(
+                        ProgressStage.COMPLETED,
+                        "Knowledge base initialization complete!",
+                        current=len(doc_files),
+                        total=len(doc_files),
+                    )
+                except Exception:
+                    # If progress update fails, continue but log a warning
+                    logger.warning("Failed to mark progress as COMPLETED")
             else:
                 logger.error("Document processing failed")
                 self.progress_tracker.update(
