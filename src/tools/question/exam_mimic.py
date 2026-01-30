@@ -169,6 +169,24 @@ async def mimic_exam_questions(
                 except Exception:
                     continue
 
+        # If not found by exact name, try to find by suffix match (for timestamped directories)
+        # e.g., "2211asm1" matches "mimic_20260130_184635_2211asm1"
+        if not latest_dir:
+            mimic_papers_dir = (
+                project_root / "data" / "user" / "question" / "mimic_papers"
+            )
+            if mimic_papers_dir.exists():
+                # Find directories that end with the paper_dir name
+                matching_dirs = [
+                    d
+                    for d in mimic_papers_dir.iterdir()
+                    if d.is_dir() and d.name.endswith(paper_dir)
+                ]
+                if matching_dirs:
+                    # Use the most recently modified directory
+                    latest_dir = max(matching_dirs, key=lambda x: x.stat().st_mtime)
+                    print(f"✓ Found matching exam directory: {latest_dir.name}")
+
         if not latest_dir:
             error_msg = f"Exam directory not found: {paper_dir}"
             await send_progress("error", {"content": error_msg})

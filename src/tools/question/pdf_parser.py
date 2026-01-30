@@ -46,6 +46,73 @@ def check_mineru_installed():
     return None
 
 
+def parse_pdf_with_pymupdf_fallback(pdf_path: str, output_base_dir: str) -> bool:
+    """
+    Fallback PDF parser using PyMuPDF when MinerU is not available.
+    Extracts text and creates a markdown file so question extraction can work.
+    """
+    import json
+    
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("✗ Error: PyMuPDF not installed. Install with: pip install PyMuPDF")
+        return False
+
+    pdf_path = Path(pdf_path).resolve()
+    pdf_name = pdf_path.stem
+    output_dir = output_base_dir / pdf_name / "auto"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"📄 Using PyMuPDF fallback parser")
+    print(f"   PDF: {pdf_path}")
+    print(f"   Output: {output_dir.parent}")
+
+    try:
+        doc = fitz.open(str(pdf_path))
+        
+        # Extract text from all pages and build markdown content
+        markdown_lines = [f"# {pdf_name}\n\n"]
+        pages_data = []
+        
+        for page_num, page in enumerate(doc, 1):
+            text = page.get_text()
+            pages_data.append({
+                "page": page_num,
+                "text": text
+            })
+            # Add page content as markdown
+            markdown_lines.append(f"## Page {page_num}\n\n{text}\n\n")
+        
+        # Save as markdown file (required by question extractor)
+        markdown_content = "".join(markdown_lines)
+        output_md = output_dir / f"{pdf_name}.md"
+        with open(output_md, "w", encoding="utf-8") as f:
+            f.write(markdown_content)
+        
+        # Also save the extracted data as JSON for reference
+        output_json = output_dir / f"{pdf_name}_extracted.json"
+        with open(output_json, "w", encoding="utf-8") as f:
+            json.dump({
+                "pdf_name": pdf_name,
+                "total_pages": len(doc),
+                "pages": pages_data,
+                "parser": "pymupdf_fallback"
+            }, f, ensure_ascii=False, indent=2)
+        
+        print(f"✓ Extracted text from {len(doc)} pages")
+        print(f"📦 Markdown file: {output_md.name}")
+        print(f"📦 Output saved to: {output_dir.parent}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"✗ PyMuPDF fallback failed: {e!s}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def parse_pdf_with_mineru(pdf_path: str, output_base_dir: str = None):
     """
     Parse PDF file using MinerU
@@ -59,13 +126,14 @@ def parse_pdf_with_mineru(pdf_path: str, output_base_dir: str = None):
     """
     mineru_cmd = check_mineru_installed()
     if not mineru_cmd:
-        print("✗ Error: MinerU installation not detected")
-        print("Please install MinerU first:")
-        print("  pip install magic-pdf[full]")
-        print("or")
-        print("  pip install mineru")
-        print("or visit: https://github.com/opendatalab/MinerU")
-        return False
+        print("⚠️ Warning: MinerU installation not detected")
+        print("Attempting fallback parser with PyMuPDF...")
+        output_base_dir = Path(output_base_dir) if output_base_dir else None
+        if output_base_dir is None:
+            project_root = Path(__file__).parent.parent.parent.parent
+            output_base_dir = project_root / "reference_papers"
+        output_base_dir.mkdir(parents=True, exist_ok=True)
+        return parse_pdf_with_pymupdf_fallback(pdf_path, output_base_dir)
 
     print(f"✓ Detected MinerU command: {mineru_cmd}")
 

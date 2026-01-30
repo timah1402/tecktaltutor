@@ -11,7 +11,7 @@ import logging
 import os
 from typing import AsyncGenerator, Dict, List, Optional
 
-import aiohttp
+import httpx
 
 # Get loggers for suppression during fallback scenarios
 # (lightrag logs errors internally before raising exceptions)
@@ -204,7 +204,7 @@ async def _openai_complete(
     except Exception:
         pass  # Fall through to direct call
 
-    # Fallback: Direct aiohttp call
+    # Fallback: Direct httpx call
     if not content and base_url:
         # Build URL using unified utility (use binding for Azure detection)
         url = build_chat_url(base_url, api_version, binding)
@@ -231,22 +231,25 @@ async def _openai_complete(
         if "response_format" in kwargs:
             data["response_format"] = kwargs["response_format"]
 
-        timeout = aiohttp.ClientTimeout(total=120)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, headers=headers, json=data) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    if "choices" in result and result["choices"]:
-                        msg = result["choices"][0].get("message", {})
-                        # Use unified response extraction
-                        content = extract_response_content(msg)
-                else:
-                    error_text = await resp.text()
-                    raise LLMAPIError(
-                        f"OpenAI API error: {error_text}",
-                        status_code=resp.status,
-                        provider=binding or "openai",
-                    )
+        # Use httpx for better Brotli support
+        async with httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+            timeout=120.0
+        ) as client:
+            response = await client.post(url, headers=headers, json=data)
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and result["choices"]:
+                    msg = result["choices"][0].get("message", {})
+                    # Use unified response extraction
+                    content = extract_response_content(msg)
+            else:
+                error_text = response.text
+                raise LLMAPIError(
+                    f"OpenAI API error: {error_text}",
+                    status_code=response.status_code,
+                    provider=binding or "openai",
+                )
 
     if content is not None:
         # Clean thinking tags from response using unified utility
@@ -309,55 +312,58 @@ async def _openai_stream(
     if "response_format" in kwargs:
         data["response_format"] = kwargs["response_format"]
 
-    timeout = aiohttp.ClientTimeout(total=300)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, headers=headers, json=data) as resp:
-            if resp.status != 200:
-                error_text = await resp.text()
-                raise LLMAPIError(
-                    f"OpenAI stream error: {error_text}",
-                    status_code=resp.status,
-                    provider=binding or "openai",
-                )
+    # Use httpx for better Brotli support
+    async with httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        timeout=300.0
+    ) as client:
+        response = await client.post(url, headers=headers, json=data)
+        if response.status_code != 200:
+            error_text = response.text
+            raise LLMAPIError(
+                f"OpenAI stream error: {error_text}",
+                status_code=response.status_code,
+                provider=binding or "openai",
+            )
 
-            # Track thinking block state for streaming
-            in_thinking_block = False
-            thinking_buffer = ""
+        # Track thinking block state for streaming
+        in_thinking_block = False
+        thinking_buffer = ""
 
-            async for line in resp.content:
-                line_str = line.decode("utf-8").strip()
-                if not line_str or not line_str.startswith("data:"):
-                    continue
+        async for line in response.aiter_lines():
+            line_str = line.strip()
+            if not line_str or not line_str.startswith("data:"):
+                continue
 
-                data_str = line_str[5:].strip()
-                if data_str == "[DONE]":
-                    break
+            data_str = line_str[5:].strip()
+            if data_str == "[DONE]":
+                break
 
-                try:
-                    chunk_data = json.loads(data_str)
-                    if "choices" in chunk_data and chunk_data["choices"]:
-                        delta = chunk_data["choices"][0].get("delta", {})
-                        content = delta.get("content")
-                        if content:
-                            # Handle thinking tags in streaming
-                            if "<think>" in content:
-                                in_thinking_block = True
-                                thinking_buffer = content
-                                continue
-                            elif in_thinking_block:
-                                thinking_buffer += content
-                                if "</think>" in thinking_buffer:
-                                    # End of thinking block, clean and yield
-                                    cleaned = clean_thinking_tags(thinking_buffer, binding, model)
-                                    if cleaned:
-                                        yield cleaned
-                                    in_thinking_block = False
-                                    thinking_buffer = ""
-                                continue
-                            else:
-                                yield content
-                except json.JSONDecodeError:
-                    continue
+            try:
+                chunk_data = json.loads(data_str)
+                if "choices" in chunk_data and chunk_data["choices"]:
+                    delta = chunk_data["choices"][0].get("delta", {})
+                    content = delta.get("content")
+                    if content:
+                        # Handle thinking tags in streaming
+                        if "<think>" in content:
+                            in_thinking_block = True
+                            thinking_buffer = content
+                            continue
+                        elif in_thinking_block:
+                            thinking_buffer += content
+                            if "</think>" in thinking_buffer:
+                                # End of thinking block, clean and yield
+                                cleaned = clean_thinking_tags(thinking_buffer, binding, model)
+                                if cleaned:
+                                    yield cleaned
+                                in_thinking_block = False
+                                thinking_buffer = ""
+                            continue
+                        else:
+                            yield content
+            except json.JSONDecodeError:
+                continue
 
 
 async def _anthropic_complete(
@@ -401,19 +407,22 @@ async def _anthropic_complete(
         "temperature": kwargs.get("temperature", 0.7),
     }
 
-    timeout = aiohttp.ClientTimeout(total=120)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, headers=headers, json=data) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                raise LLMAPIError(
-                    f"Anthropic API error: {error_text}",
-                    status_code=response.status,
-                    provider="anthropic",
-                )
+    # Use httpx for better Brotli support
+    async with httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        timeout=120.0
+    ) as client:
+        response = await client.post(url, headers=headers, json=data)
+        if response.status_code != 200:
+            error_text = response.text
+            raise LLMAPIError(
+                f"Anthropic API error: {error_text}",
+                status_code=response.status_code,
+                provider="anthropic",
+            )
 
-            result = await response.json()
-            return result["content"][0]["text"]
+        result = response.json()
+        return result["content"][0]["text"]
 
 
 async def _anthropic_stream(
@@ -460,36 +469,39 @@ async def _anthropic_stream(
         "stream": True,
     }
 
-    timeout = aiohttp.ClientTimeout(total=300)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, headers=headers, json=data) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                raise LLMAPIError(
-                    f"Anthropic stream error: {error_text}",
-                    status_code=response.status,
-                    provider="anthropic",
-                )
+    # Use httpx for better Brotli support
+    async with httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        timeout=300.0
+    ) as client:
+        response = await client.post(url, headers=headers, json=data)
+        if response.status_code != 200:
+            error_text = response.text
+            raise LLMAPIError(
+                f"Anthropic stream error: {error_text}",
+                status_code=response.status_code,
+                provider="anthropic",
+            )
 
-            async for line in response.content:
-                line_str = line.decode("utf-8").strip()
-                if not line_str or not line_str.startswith("data:"):
-                    continue
+        async for line in response.aiter_lines():
+            line_str = line.strip()
+            if not line_str or not line_str.startswith("data:"):
+                continue
 
-                data_str = line_str[5:].strip()
-                if not data_str:
-                    continue
+            data_str = line_str[5:].strip()
+            if not data_str:
+                continue
 
-                try:
-                    chunk_data = json.loads(data_str)
-                    event_type = chunk_data.get("type")
-                    if event_type == "content_block_delta":
-                        delta = chunk_data.get("delta", {})
-                        text = delta.get("text")
-                        if text:
-                            yield text
-                except json.JSONDecodeError:
-                    continue
+            try:
+                chunk_data = json.loads(data_str)
+                event_type = chunk_data.get("type")
+                if event_type == "content_block_delta":
+                    delta = chunk_data.get("delta", {})
+                    text = delta.get("text")
+                    if text:
+                        yield text
+            except json.JSONDecodeError:
+                continue
 
 
 async def fetch_models(
@@ -516,24 +528,27 @@ async def fetch_models(
     # Remove Content-Type for GET request
     headers.pop("Content-Type", None)
 
-    timeout = aiohttp.ClientTimeout(total=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    # Use httpx for better Brotli support
+    async with httpx.AsyncClient(
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        timeout=30.0
+    ) as client:
         try:
             url = f"{base_url}/models"
-            async with session.get(url, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if "data" in data and isinstance(data["data"], list):
-                        return [
-                            m.get("id") or m.get("name")
-                            for m in data["data"]
-                            if m.get("id") or m.get("name")
-                        ]
-                    elif isinstance(data, list):
-                        return [
-                            m.get("id") or m.get("name") if isinstance(m, dict) else str(m)
-                            for m in data
-                        ]
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "data" in data and isinstance(data["data"], list):
+                    return [
+                        m.get("id") or m.get("name")
+                        for m in data["data"]
+                        if m.get("id") or m.get("name")
+                    ]
+                elif isinstance(data, list):
+                    return [
+                        m.get("id") or m.get("name") if isinstance(m, dict) else str(m)
+                        for m in data
+                    ]
             return []
         except Exception as e:
             print(f"Error fetching models from {base_url}: {e}")
