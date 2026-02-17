@@ -54,6 +54,7 @@ export default function GuidePage() {
     nextKnowledge,
     sendMessage,
     fixHtml,
+    resetSession,
   } = useGuideSession();
 
   // UI state
@@ -120,6 +121,7 @@ export default function GuidePage() {
             isLastKnowledge={isLastKnowledge}
             onStartLearning={startLearning}
             onNextKnowledge={nextKnowledge}
+            onReset={resetSession}
           />
         )}
 

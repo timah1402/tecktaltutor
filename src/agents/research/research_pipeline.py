@@ -166,24 +166,27 @@ class ResearchPipeline:
         if self.logger:
             self.logger.info("Initializing Agents...")
 
+        # Get binding from config
+        binding = self.config.get("llm", {}).get("binding", "openai")
+
         self.agents = {
             "rephrase": RephraseAgent(
-                self.config, self.api_key, self.base_url, api_version=self.api_version
+                self.config, self.api_key, self.base_url, api_version=self.api_version, binding=binding
             ),
             "decompose": DecomposeAgent(
-                self.config, self.api_key, self.base_url, api_version=self.api_version
+                self.config, self.api_key, self.base_url, api_version=self.api_version, binding=binding
             ),
             "manager": ManagerAgent(
-                self.config, self.api_key, self.base_url, api_version=self.api_version
+                self.config, self.api_key, self.base_url, api_version=self.api_version, binding=binding
             ),
             "research": ResearchAgent(
-                self.config, self.api_key, self.base_url, api_version=self.api_version
+                self.config, self.api_key, self.base_url, api_version=self.api_version, binding=binding
             ),
             "note": NoteAgent(
-                self.config, self.api_key, self.base_url, api_version=self.api_version
+                self.config, self.api_key, self.base_url, api_version=self.api_version, binding=binding
             ),
             "reporting": ReportingAgent(
-                self.config, self.api_key, self.base_url, api_version=self.api_version
+                self.config, self.api_key, self.base_url, api_version=self.api_version, binding=binding
             ),
         }
 

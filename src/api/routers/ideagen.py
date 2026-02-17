@@ -27,6 +27,27 @@ from src.services.settings.interface_settings import get_ui_language
 
 router = APIRouter()
 
+
+class CancelledException(Exception):
+    """Exception raised when the websocket is disconnected during processing."""
+    pass
+
+
+async def check_websocket_connected(websocket: WebSocket, task_id: str = None):
+    """
+    Check if websocket is still connected.
+    Raises CancelledException if disconnected.
+    """
+    try:
+        # Try to send a ping-like message to check connection
+        # Using client_state is more reliable than trying to send
+        if websocket.client_state.value != 1:  # 1 = CONNECTED
+            logger.info(f"WebSocket disconnected during processing (task_id={task_id})")
+            raise CancelledException("Client disconnected")
+    except Exception as e:
+        logger.info(f"WebSocket check failed (task_id={task_id}): {e}")
+        raise CancelledException("Connection lost")
+
 # Initialize logger with config
 project_root = Path(__file__).parent.parent.parent.parent
 config = load_config_with_main("solve_config.yaml", project_root)  # Use any config to get main.yaml
@@ -200,6 +221,7 @@ async def websocket_ideagen(websocket: WebSocket):
                 base_url=llm_config.base_url,
                 api_version=getattr(llm_config, "api_version", None),
                 model=llm_config.model,
+                binding=getattr(llm_config, "binding", "openai"),
                 language=ui_language,
             )
 
@@ -260,6 +282,7 @@ async def websocket_ideagen(websocket: WebSocket):
             base_url=llm_config.base_url,
             api_version=getattr(llm_config, "api_version", None),
             model=llm_config.model,
+            binding=getattr(llm_config, "binding", "openai"),
             progress_callback=None,  # We manually manage status here
             language=ui_language,
         )
@@ -298,6 +321,9 @@ async def websocket_ideagen(websocket: WebSocket):
         total_points = len(filtered_points)
 
         for idx, point in enumerate(filtered_points):
+            # Check if websocket is still connected before processing each point
+            await check_websocket_connected(websocket, task_id)
+            
             point_name = point.get("knowledge_point", f"Point {idx + 1}")
             logger.info(f"Processing knowledge point {idx + 1}/{total_points}: {point_name}")
 
@@ -310,6 +336,8 @@ async def websocket_ideagen(websocket: WebSocket):
                 task_id=task_id,
             )
 
+            # Check connection before expensive LLM call
+            await check_websocket_connected(websocket, task_id)
             research_ideas = await workflow.explore_ideas(point)
             logger.info(f"Generated {len(research_ideas)} research ideas")
 
@@ -343,6 +371,8 @@ async def websocket_ideagen(websocket: WebSocket):
                 task_id=task_id,
             )
 
+            # Check connection before expensive LLM call
+            await check_websocket_connected(websocket, task_id)
             kept_ideas = await workflow.strict_filter(point, research_ideas)
             logger.info(f"Kept {len(kept_ideas)} ideas after strict filter")
 
@@ -359,6 +389,8 @@ async def websocket_ideagen(websocket: WebSocket):
                 task_id=task_id,
             )
 
+            # Check connection before expensive LLM call
+            await check_websocket_connected(websocket, task_id)
             statement = await workflow.generate_statement(point, kept_ideas)
             logger.info(f"Statement generated ({len(statement)} chars)")
 
@@ -405,8 +437,14 @@ async def websocket_ideagen(websocket: WebSocket):
         task_manager.update_task_status(task_id, "completed")
         logger.success(f"Task {task_id} completed")
 
+    except CancelledException:
+        logger.info(f"Task cancelled by user (task_id={task_id})")
+        if task_id:
+            task_manager.update_task_status(task_id, "cancelled")
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected (task_id={task_id})")
+        if task_id:
+            task_manager.update_task_status(task_id, "cancelled")
     except Exception as e:
         logger.error(f"ERROR: {e}")
 

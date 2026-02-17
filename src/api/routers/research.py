@@ -24,6 +24,24 @@ if sys.platform == "win32":
 router = APIRouter()
 
 
+class CancelledException(Exception):
+    """Exception raised when WebSocket connection is lost during processing"""
+    pass
+
+
+async def check_websocket_connected(websocket: WebSocket):
+    """Check if WebSocket is still connected, raise CancelledException if not"""
+    try:
+        # Try to receive with immediate timeout to check connection status
+        await asyncio.wait_for(websocket.receive_text(), timeout=0.001)
+    except asyncio.TimeoutError:
+        # Timeout is expected - connection is alive
+        pass
+    except Exception:
+        # Any other exception means connection was lost
+        raise CancelledException("WebSocket connection lost")
+
+
 # Helper to load config (with main.yaml merge)
 def load_config():
     project_root = Path(__file__).parent.parent.parent.parent
@@ -57,11 +75,12 @@ async def optimize_topic(request: OptimizeRequest):
             llm_config = get_llm_config()
             api_key = llm_config.api_key
             base_url = llm_config.base_url
+            binding = getattr(llm_config, "binding", "openai")
         except Exception as e:
             return {"error": f"LLM config error: {e!s}"}
 
         # Init Agent
-        agent = RephraseAgent(config=config, api_key=api_key, base_url=base_url)
+        agent = RephraseAgent(config=config, api_key=api_key, base_url=base_url, binding=binding)
 
         # Process
         # If iteration > 0, topic is treated as feedback
@@ -96,7 +115,7 @@ async def websocket_research_run(websocket: WebSocket):
         topic = data.get("topic")
         kb_name = data.get("kb_name", "ai_textbook")
         # New unified parameters
-        plan_mode = data.get("plan_mode", "medium")  # quick, medium, deep, auto
+        plan_mode = data.get("plan_mode", "quick")  # quick, medium, deep, auto (default: quick for faster results)
         enabled_tools = data.get("enabled_tools", ["RAG"])  # RAG, Paper, Web
         skip_rephrase = data.get("skip_rephrase", False)
         # Legacy support
@@ -178,6 +197,17 @@ async def websocket_research_run(websocket: WebSocket):
                 if key not in config["reporting"]:
                     config["reporting"][key] = value
 
+        # Initialize RAG config from research.rag
+        # This ensures kb_name, default_mode, fallback_mode are properly inherited
+        if "rag" not in config:
+            config["rag"] = research_config.get("rag", {}).copy()
+        else:
+            # Merge with research.rag defaults
+            default_rag = research_config.get("rag", {})
+            for key, value in default_rag.items():
+                if key not in config["rag"]:
+                    config["rag"][key] = value
+
         # Apply plan_mode configuration (unified approach affecting both planning and researching)
         # Each mode defines:
         # - Planning: tree depth (subtopics count) and mode (manual/auto)
@@ -186,22 +216,31 @@ async def websocket_research_run(websocket: WebSocket):
             "quick": {
                 "planning": {"decompose": {"initial_subtopics": 2, "mode": "manual"}},
                 "researching": {"max_iterations": 2, "iteration_mode": "fixed"},
+                "description": "⚡ Quick mode: 2 subtopics, 2 iterations (~2-3 min)",
             },
             "medium": {
                 "planning": {"decompose": {"initial_subtopics": 5, "mode": "manual"}},
                 "researching": {"max_iterations": 4, "iteration_mode": "fixed"},
+                "description": "⚙️ Medium mode: 5 subtopics, 4 iterations (~5-8 min)",
             },
             "deep": {
                 "planning": {"decompose": {"initial_subtopics": 8, "mode": "manual"}},
                 "researching": {"max_iterations": 7, "iteration_mode": "fixed"},
+                "description": "🔬 Deep mode: 8 subtopics, 7 iterations (~15-20 min)",
             },
             "auto": {
                 "planning": {"decompose": {"mode": "auto", "auto_max_subtopics": 8}},
                 "researching": {"max_iterations": 6, "iteration_mode": "flexible"},
+                "description": "🤖 Auto mode: Adaptive subtopics, 6 iterations (~10-15 min)",
             },
         }
         if plan_mode in plan_mode_config:
             mode_cfg = plan_mode_config[plan_mode]
+            # Log the selected mode
+            await websocket.send_json({
+                "type": "log", 
+                "content": f"📋 Research Mode: {mode_cfg.get('description', plan_mode)}\n"
+            })
             # Apply planning configuration
             if "planning" in mode_cfg:
                 for key, value in mode_cfg["planning"].items():
@@ -294,8 +333,13 @@ async def websocket_research_run(websocket: WebSocket):
                     log = await log_queue.get()
                     if log is None:
                         break
+                    # Check connection before sending
+                    await check_websocket_connected(websocket)
                     await websocket.send_json({"type": "log", "content": log})
                     log_queue.task_done()
+                except CancelledException:
+                    logger.info(f"[{task_id}] Log pusher stopped: WebSocket disconnected")
+                    break
                 except Exception as e:
                     logger.error(f"Log pusher error: {e}")
                     break
@@ -307,14 +351,37 @@ async def websocket_research_run(websocket: WebSocket):
                     event = await progress_queue.get()
                     if event is None:
                         break
+                    # Check connection before sending
+                    await check_websocket_connected(websocket)
                     await websocket.send_json(event)
                     progress_queue.task_done()
+                except CancelledException:
+                    logger.info(f"[{task_id}] Progress pusher stopped: WebSocket disconnected")
+                    break
                 except Exception as e:
                     logger.error(f"Progress pusher error: {e}")
                     break
 
         pusher_task = asyncio.create_task(log_pusher())
         progress_pusher_task = asyncio.create_task(progress_pusher())
+
+        # 5.5 WebSocket connection monitor
+        pipeline_task = None
+        cancellation_flag = {"cancelled": False}
+        
+        async def connection_monitor():
+            """Monitor WebSocket connection and set cancellation flag if disconnected"""
+            try:
+                while not cancellation_flag["cancelled"]:
+                    await asyncio.sleep(1)  # Check every second
+                    await check_websocket_connected(websocket)
+            except CancelledException:
+                logger.info(f"[{task_id}] Connection lost, cancelling research...")
+                cancellation_flag["cancelled"] = True
+                if pipeline_task and not pipeline_task.done():
+                    pipeline_task.cancel()
+        
+        monitor_task = asyncio.create_task(connection_monitor())
 
         # 6. Run Pipeline with stdout interception
         class ResearchStdoutInterceptor:
@@ -345,7 +412,12 @@ async def websocket_research_run(websocket: WebSocket):
                 {"type": "status", "content": "started", "research_id": pipeline.research_id}
             )
 
-            result = await pipeline.run(topic)
+            # Check WebSocket connection before starting expensive operation
+            await check_websocket_connected(websocket)
+            
+            # Run pipeline in a task so we can monitor and cancel it
+            pipeline_task = asyncio.create_task(pipeline.run(topic))
+            result = await pipeline_task
 
             # Send final report content
             with open(result["final_report_path"], encoding="utf-8") as f:
@@ -382,6 +454,21 @@ async def websocket_research_run(websocket: WebSocket):
         finally:
             sys.stdout = original_stdout  # Safely restore using saved reference
 
+    except CancelledException as e:
+        logger.info(f"[{task_id if 'task_id' in locals() else 'unknown'}] Research cancelled: WebSocket disconnected")
+        # Don't send error message as WebSocket is already closed
+        try:
+            if 'task_id' in locals():
+                task_manager.update_task_status(task_id, "cancelled", error="User cancelled")
+        except Exception:
+            pass
+    except asyncio.CancelledError:
+        logger.info(f"[{task_id if 'task_id' in locals() else 'unknown'}] Research cancelled by user")
+        try:
+            if 'task_id' in locals():
+                task_manager.update_task_status(task_id, "cancelled", error="User cancelled")
+        except Exception:
+            pass
     except Exception as e:
         await websocket.send_json({"type": "error", "content": str(e)})
         logging.error(f"Research error: {e}", exc_info=True)
@@ -397,6 +484,9 @@ async def websocket_research_run(websocket: WebSocket):
         except Exception as log_err:
             logger.warning(f"Failed to log error: {log_err}")
     finally:
+        # Stop all background tasks
+        if 'monitor_task' in locals() and monitor_task:
+            monitor_task.cancel()
         if pusher_task:
             pusher_task.cancel()
         if progress_pusher_task:

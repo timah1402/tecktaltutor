@@ -26,9 +26,23 @@ export function useKaTeXInjection() {
     const katexJS =
       '<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>';
     const katexAutoRender =
-      '<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117n7w6ODWgRrA7TlVzRsFtwW3ZxUo8h4w20Z5J3d3xjfcw" crossorigin="anonymous" onload="renderMathInElement(document.body);"></script>';
+      '<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117n7w6ODWgRrA7TlVzRsFtwW3ZxUo8h4w20Z5J3d3xjfcw" crossorigin="anonymous"></script>';
+    // Configure auto-render to recognize $ $ and $$ $$ delimiters
+    const katexConfig = `<script>
+      document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+          delimiters: [
+            {left: "$$", right: "$$", display: true},
+            {left: "$", right: "$", display: false},
+            {left: "\\\\[", right: "\\\\]", display: true},
+            {left: "\\\\(", right: "\\\\)", display: false}
+          ],
+          throwOnError: false
+        });
+      });
+    </script>`;
 
-    const katexInjection = `  ${katexCSS}\n  ${katexJS}\n  ${katexAutoRender}`;
+    const katexInjection = `  ${katexCSS}\n  ${katexJS}\n  ${katexAutoRender}\n  ${katexConfig}`;
 
     // Try to inject into </head> section (most common case)
     if (html.includes("</head>")) {

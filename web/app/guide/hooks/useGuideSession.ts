@@ -465,6 +465,14 @@ export function useGuideSession() {
     sessionState.status === "learning" &&
     sessionState.current_index === sessionState.knowledge_points.length - 1;
 
+  // Reset session to start over
+  const resetSession = useCallback(() => {
+    setSessionState(INITIAL_SESSION_STATE);
+    setChatMessages([]);
+    saveToStorage(STORAGE_KEYS.GUIDE_SESSION, INITIAL_SESSION_STATE);
+    saveToStorage(GUIDE_CHAT_KEY, []);
+  }, []);
+
   return {
     sessionState,
     chatMessages,
@@ -479,5 +487,6 @@ export function useGuideSession() {
     nextKnowledge,
     sendMessage,
     fixHtml,
+    resetSession,
   };
 }

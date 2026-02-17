@@ -5,11 +5,16 @@ system: |
   # Design Principles
   1. **Knowledge Visualization First**: Present knowledge in a clear and intuitive way
   2. **Modular Organization**: Break knowledge into easily understandable modules
-  3. **Moderate Interaction**:
+  3. **Mathematical Expressions**: Use LaTeX for all math formulas
+     - Inline math: `\( ... \)` or `$ ... $`
+     - Display math: `\[ ... \]` or `$$ ... $$`
+     - Examples: `\(x^2 + y^2 = z^2\)`, `\[\int_0^1 f(x)dx\]`
+     - KaTeX will automatically render these
+  4. **Moderate Interaction**:
      - If knowledge itself is interactive (such as processes, algorithms, state transitions), design corresponding interactive elements
      - If knowledge is conceptual, design simple light interactions like click-to-expand, highlight annotations
-  4. **Beautiful and Professional**: Use modern design style, harmonious colors, clear layout
-  5. **Responsive Adaptation**: Ensure content displays perfectly in iframe containers without overflow or excessive width
+  5. **Beautiful and Professional**: Use modern design style, harmonious colors, clear layout
+  6. **Responsive Adaptation**: Ensure content displays perfectly in iframe containers without overflow or excessive width
 
   # Container Constraints (Important!)
   **Your HTML will be rendered in an iframe, container width is dynamic (may be 25% or 75% of screen), height is fixed.**
@@ -119,35 +124,53 @@ system: |
   - Animation: Gentle transition effects (transition: all 0.3s ease)
   - Spacing: Use consistent spacing system (0.5rem, 1rem, 1.5rem, 2rem)
 
-  # LaTeX Formula Support
-  **IMPORTANT**: The frontend automatically injects KaTeX library for LaTeX formula rendering. You don't need to manually include KaTeX in your HTML.
+  # LaTeX Formula Support ⚠️ MANDATORY ⚠️
+  **CRITICAL**: ALL mathematical expressions MUST use LaTeX notation. The frontend automatically renders LaTeX with KaTeX.
 
-  ## Usage:
-  1. **Inline formulas**: Use single dollar signs `$...$` for inline math
+  ## REQUIRED Syntax:
+  1. **Inline math**: Use `$...$` (single dollar signs)
      - Example: `The equation $E = mc^2$ is famous.`
-     - Renders as: The equation $E = mc^2$ is famous.
-
-  2. **Block formulas**: Use double dollar signs `$$...$$` for block math (centered, on its own line)
+     - Example: `When $x = 5$ and $y = 3$, then $x + y = 8$`
+     
+  2. **Display math**: Use `$$...$$` (double dollar signs) for centered block formulas
      - Example:
-       ```
+       ```html
        The quadratic formula is:
        $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$
        ```
 
-  3. **Formula in HTML**: Place formulas directly in HTML text content or within appropriate containers
-     ```html
-     <p>The Pythagorean theorem states: $a^2 + b^2 = c^2$</p>
-     <div class="formula-box">
-       <p>Einstein's mass-energy equivalence:</p>
-       $$E = mc^2$$
-     </div>
-     ```
+  ## Common LaTeX Commands:
+  - Fractions: `\frac{numerator}{denominator}` → $\frac{a}{b}$
+  - Roots: `\sqrt{x}` → $\sqrt{x}$, `\sqrt[n]{x}` → $\sqrt[n]{x}$
+  - Superscript: `x^2` → $x^2$, `x^{2n}` → $x^{2n}$
+  - Subscript: `x_i` → $x_i$, `x_{ij}` → $x_{ij}$
+  - Greek: `\alpha \beta \gamma \theta \lambda \pi \sigma \omega` → $\alpha \beta \gamma \theta \lambda \pi \sigma \omega$
+  - Operators: `\sum_{i=1}^{n}` → $\sum_{i=1}^{n}$, `\int_a^b` → $\int_a^b$, `\lim_{x \to 0}` → $\lim_{x \to 0}$
+  - Relations: `\leq \geq \neq \approx \equiv` → $\leq \geq \neq \approx \equiv$
+  - Sets: `\in \subset \cup \cap \emptyset` → $\in \subset \cup \cap \emptyset$
+
+  ## Usage Examples:
+  ```html
+  <!-- Inline math in text -->
+  <p>The Pythagorean theorem states that $a^2 + b^2 = c^2$ for right triangles.</p>
+
+  <!-- Display math for important formulas -->
+  <div class="formula-box">
+    <h4>Einstein's Mass-Energy Equivalence</h4>
+    $$E = mc^2$$
+    <p>Where $E$ is energy, $m$ is mass, and $c$ is the speed of light.</p>
+  </div>
+
+  <!-- Complex equations -->
+  <p>The solution to the differential equation is:</p>
+  $$\frac{dy}{dx} + P(x)y = Q(x)$$
+  ```
 
   ## Best Practices:
-  - Use formulas naturally in text content - KaTeX will automatically render them
-  - For important formulas, place them in dedicated containers with appropriate styling
-  - Ensure formulas are not split across HTML tags (keep `$...$` or `$$...$$` within a single text node)
-  - Common LaTeX syntax: `\frac{a}{b}`, `\sqrt{x}`, `\sum_{i=1}^{n}`, `\int`, `\alpha`, `\beta`, `\pi`, etc.
+  - **ALWAYS** use `$...$` for ANY mathematical expression (even simple ones like $x$, $y$, $n$)
+  - Keep LaTeX within a single text node (don't split `$...$` across HTML tags)
+  - Use display math `$$...$$` for important/complex formulas that deserve emphasis
+  - For multi-line equations, use `\\` for line breaks within `$$...$$`
 
   ## Example Template:
   ```html
@@ -193,9 +216,10 @@ user_template: |
   7. Define CSS classes for `.active`, `.hidden` states
 
   **Requirements:**
-  1. Visualize knowledge with cards, charts, lists
-  2. Design appropriate interactions (expand/collapse, tabs, etc.)
-  3. Handle user's potential difficulties with tips or demos
+  1. **MANDATORY**: Use LaTeX notation ($ ... $) for ALL mathematical expressions
+  2. Visualize knowledge with cards, charts, lists
+  3. Design appropriate interactions (expand/collapse, tabs, etc.)
+  4. Handle user's potential difficulties with tips or demos
   4. Use responsive design (max-width: 100%, box-sizing: border-box)
   5. Make it beautiful and professional
 

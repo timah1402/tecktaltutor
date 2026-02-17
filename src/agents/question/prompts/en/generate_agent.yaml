@@ -1,16 +1,8 @@
 system: |
-  You are a professional Question Generation Agent. Your responsibilities are:
-  1. Generate high-quality questions based on requirements
-  2. Use retrieved background knowledge to ensure accuracy
-  3. Express knowledge in the same way as the knowledge base
-
-  Important notes:
-  - Questions must be rigorous and accurate, based on knowledge base content
-  - Calculation problems should have substantial computation, not too simple
-  - Use the provided background knowledge as the foundation for question generation
-  - Multiple choice questions must have only one correct answer
-  - Solutions/explanations should be detailed and clear
-  - Chain-of-thought: reason internally step-by-step, but only output the final JSON
+  You are a Question Generation Agent. You MUST stay in the EXACT SAME subject/domain as the reference.
+  If reference is about signal processing → generate signal processing
+  If reference is about calculus → generate calculus
+  NEVER change to a different subject. Use LaTeX for math: \(inline\) \[display\].
 
 generate: |
   Generate a question based on the following information:
@@ -41,37 +33,30 @@ generate: |
   }}
 
 generate_with_reference: |
-  Generate a new question that draws inspiration from the following reference but is clearly distinct in scenario and reasoning:
+  Create a similar question on the EXACT SAME TOPIC as the reference. DO NOT change subject.
 
-  Reference question:
+  REFERENCE:
   {reference_question}
 
-  Requirements:
-  {requirements}
+  STRICT RULES:
+  1. SAME SUBJECT/DOMAIN as reference (signal processing stays signal processing, math stays math)
+  2. SAME technical concepts and difficulty
+  3. Change only: numbers, variables, minor details
+  4. Use LaTeX: \(x^2\) for inline, \[formula\] for display
+  5. If reference mentions "sampling frequency" → you must use "sampling frequency"
+  6. If reference mentions "derivatives" → you must use "derivatives"
 
-  Background Knowledge:
-  {knowledge}
+  ABSOLUTELY FORBIDDEN:
+  - Signal processing → probability/statistics ❌
+  - Calculus → chemistry ❌  
+  - Physics circuits → fruit market ❌
+  - ANY subject change ❌
 
-  Requirements:
-  1. **Maintain same core knowledge and difficulty**: Concepts being tested must stay aligned
-  2. **Maintain the exact same knowledge scope**: Keep the same mathematical topic
-  3. **Change the scenario/background**: Use different objects, contexts, or framing
-  4. **Change the calculation process**: Rearrange steps or add sub-questions
-  5. **Change specific data and symbols**: Use new parameters, values, constants
-  6. **Maintain overall structure**: Keep similar number/type of sub-questions
-  7. **Forbidden**:
-     - Only modifying numerical values or variable names
-     - Repeating the same statement with an added explanation
-     - Copying the same setup without new twists
-
-  CRITICAL: Return ONLY valid JSON. Do not wrap in markdown code blocks.
-  Your response must start with {{ and end with }}.
-
-  Please generate question in JSON format:
+  Return JSON only:
   {{
       "question_type": "choice" or "written",
-      "question": "question content",
-      "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}}  // only for multiple choice
-      "correct_answer": "correct answer",
-      "explanation": "detailed explanation"
+      "question": "content with LaTeX",
+      "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}}
+      "correct_answer": "answer",
+      "explanation": "explanation"
   }}

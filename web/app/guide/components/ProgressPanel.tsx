@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Play, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Loader2, Play, ChevronRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { SessionState } from "../types";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +12,7 @@ interface ProgressPanelProps {
   isLastKnowledge: boolean;
   onStartLearning: () => void;
   onNextKnowledge: () => void;
+  onReset?: () => void;
 }
 
 export default function ProgressPanel({
@@ -22,6 +23,7 @@ export default function ProgressPanel({
   isLastKnowledge,
   onStartLearning,
   onNextKnowledge,
+  onReset,
 }: ProgressPanelProps) {
   const { t } = useTranslation();
   return (
@@ -30,9 +32,21 @@ export default function ProgressPanel({
         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
           {t("Learning Progress")}
         </span>
-        <span className="text-xs text-slate-400 dark:text-slate-500">
-          {sessionState.progress}%
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 dark:text-slate-500">
+            {sessionState.progress}%
+          </span>
+          {onReset && (
+            <button
+              onClick={onReset}
+              disabled={isLoading}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors disabled:opacity-50"
+              title={t("Start Over")}
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mb-4">
         <div
