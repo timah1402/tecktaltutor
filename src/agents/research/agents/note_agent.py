@@ -28,6 +28,7 @@ class NoteAgent(BaseAgent):
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         api_version: Optional[str] = None,
+        binding: str = "openai",
     ):
         language = config.get("system", {}).get("language", "zh")
         super().__init__(
@@ -36,6 +37,7 @@ class NoteAgent(BaseAgent):
             api_key=api_key,
             base_url=base_url,
             api_version=api_version,
+            binding=binding,
             language=language,
             config=config,
         )

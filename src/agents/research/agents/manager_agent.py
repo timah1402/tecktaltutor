@@ -26,6 +26,7 @@ class ManagerAgent(BaseAgent):
         api_key: str | None = None,
         base_url: str | None = None,
         api_version: str | None = None,
+        binding: str = "openai",
     ):
         language = config.get("system", {}).get("language", "zh")
         super().__init__(
@@ -34,6 +35,7 @@ class ManagerAgent(BaseAgent):
             api_key=api_key,
             base_url=base_url,
             api_version=api_version,
+            binding=binding,
             language=language,
             config=config,
         )

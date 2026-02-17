@@ -56,7 +56,7 @@ question:
       execution_mode: "parallel"
   # Refactored: no iteration loops (max_rounds removed)
   rag_query_count: 3
-  max_parallel_questions: 1
+  max_parallel_questions: 3 # Process 3 questions simultaneously for faster generation
   rag_mode: naive
   agents:
     retrieve:

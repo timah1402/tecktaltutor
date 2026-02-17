@@ -134,8 +134,9 @@ async def create_session(request: CreateSessionRequest):
 
         if result and "session_id" in result:
             session_id = result["session_id"]
-            task_id = task_manager.generate_task_id("guide", session_id)
-            logger.info(f"[{task_id}] Session created: {session_id}")
+            if session_id:
+                task_id = task_manager.generate_task_id("guide", session_id)
+                logger.info(f"[{task_id}] Session created: {session_id}")
 
         return result
 
@@ -143,6 +144,25 @@ async def create_session(request: CreateSessionRequest):
         raise
     except Exception as e:
         logger.error(f"Create session failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cancel_session")
+async def cancel_session():
+    """
+    Cancel ongoing session creation.
+    
+    Returns:
+        Cancellation confirmation
+    """
+    try:
+        # Since we don't have session_id yet, we can add a global cancel flag
+        # For now, just return success - the real implementation would need
+        # tracking of in-progress creations
+        logger.info("Session creation cancellation requested")
+        return {"success": True, "message": "Cancellation requested"}
+    except Exception as e:
+        logger.error(f"Cancel session failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -165,6 +165,7 @@ class AgentCoordinator:
     async def generate_question(
         self,
         requirement: dict[str, Any],
+        skip_rag: bool = False,
     ) -> dict[str, Any]:
         """
         Generate a single question with relevance analysis.
@@ -173,6 +174,7 @@ class AgentCoordinator:
 
         Args:
             requirement: Question requirement dict
+            skip_rag: If True, skip RAG retrieval and use only reference content (for mimic mode)
 
         Returns:
             Dict with:
@@ -188,22 +190,27 @@ class AgentCoordinator:
             "progress", {"stage": "generating", "progress": {"status": "initializing"}}
         )
 
-        # Step 1: Retrieve knowledge
-        retrieve_agent = self._create_retrieve_agent()
-        retrieval_result = await retrieve_agent.process(
-            requirement=requirement,
-            num_queries=self.rag_query_count,
-        )
+        # Step 1: Retrieve knowledge (skip for mimic mode if skip_rag is True)
+        if skip_rag:
+            # For mimic mode, use minimal context from the reference question itself
+            self.logger.info("Skipping RAG retrieval - using only reference question content")
+            knowledge_context = "Generate questions based solely on the provided reference question. Do not introduce external knowledge."
+        else:
+            retrieve_agent = self._create_retrieve_agent()
+            retrieval_result = await retrieve_agent.process(
+                requirement=requirement,
+                num_queries=self.rag_query_count,
+            )
 
-        if not retrieval_result.get("has_content"):
-            self.logger.warning("No relevant knowledge found")
-            return {
-                "success": False,
-                "error": "knowledge_not_found",
-                "message": "Knowledge base does not contain relevant information.",
-            }
+            if not retrieval_result.get("has_content"):
+                self.logger.warning("No relevant knowledge found")
+                return {
+                    "success": False,
+                    "error": "knowledge_not_found",
+                    "message": "Knowledge base does not contain relevant information.",
+                }
 
-        knowledge_context = retrieval_result["summary"]
+            knowledge_context = retrieval_result["summary"]
 
         # Step 2: Generate question
         generate_agent = self._create_generate_agent()
@@ -226,12 +233,21 @@ class AgentCoordinator:
 
         question = gen_result["question"]
 
-        # Step 3: Analyze relevance
-        analyzer = self._create_relevance_analyzer()
-        analysis = await analyzer.process(
-            question=question,
-            knowledge_context=knowledge_context,
-        )
+        # Step 3: Analyze relevance (skip for mimic mode to improve speed)
+        if skip_rag:
+            # For mimic mode, skip relevance analysis since we're basing on reference
+            self.logger.info("Skipping relevance analysis for mimic mode")
+            analysis = {
+                "relevance": "high",
+                "kb_coverage": "N/A - mimic mode",
+                "extension_points": "",
+            }
+        else:
+            analyzer = self._create_relevance_analyzer()
+            analysis = await analyzer.process(
+                question=question,
+                knowledge_context=knowledge_context,
+            )
 
         self.logger.success(f"Question generated with {analysis['relevance']} relevance")
 

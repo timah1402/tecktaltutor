@@ -41,32 +41,16 @@ async def generate_question_from_reference(
     """
     Generate a new question based on a reference entry.
     """
-    # Build generation requirement that encodes the reference
+    # Build minimal requirement for mimic mode - the prompt template has all the instructions
     requirement = {
         "reference_question": reference_question["question_text"],
         "has_images": len(reference_question.get("images", [])) > 0,
         "kb_name": kb_name,
-        "allow_reject": False,
-        "additional_requirements": (
-            f"Reference question:\n{reference_question['question_text']}\n\n"
-            "Requirements:\n"
-            "1. Keep a similar difficulty level.\n"
-            "2. **Identify the core knowledge concept(s) of the reference and keep them EXACTLY the same. Do not introduce new advanced topics beyond what the reference question requires.**\n"
-            "3. **Change the scenario/objects/geometry; do not simply replace numbers or symbols.**\n"
-            "4. **Alter at least one part of the reasoning process or add a new sub-question "
-            "(e.g., extra calculation, analysis, or proof).**\n"
-            "5. Keep the problem entirely within the same mathematical scope as the reference (e.g., if the reference is planar line parametrization, you must stay within planar line parametrization and cannot escalate to surfaces or directional derivatives).\n"
-            "6. Ensure the prompt is rigorous, precise, and self-contained.\n"
-            "7. If the original problem references images, describe them in text.\n"
-            "8. Rejection is forbidden—you must complete the generation task.\n\n"
-            "Chain-of-thought guidance:\n"
-            "- Think step-by-step to plan the new scenario and reasoning before producing the final JSON.\n"
-            "- Do not reveal your reasoning; output only the final JSON."
-        ),
     }
 
-    # Trigger generation through the coordinator
-    result = await coordinator.generate_question(requirement)
+    # Trigger generation through the coordinator with skip_rag=True
+    # This ensures questions are based only on the reference question, not RAG knowledge base
+    result = await coordinator.generate_question(requirement, skip_rag=True)
 
     return result
 

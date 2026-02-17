@@ -12,12 +12,17 @@ process:
     Iteration Count: {iteration}
     {previous_result}
 
+    **Knowledge Base Context:**
+    {kb_context}
+
     **Optimization Dimensions:**
 
     1. **Research Topic**: Transform into a clear, specific, researchable topic
     2. **Research Focus**: Identify core issues and key elements
     3. **Research Scope**: Clarify boundaries, define depth and breadth
     4. **Optimization Rationale**: Explain optimization basis and logic
+
+    **Important:** If knowledge base context is provided, ensure the optimized topic is RELEVANT to and GROUNDED in the knowledge base content. The topic should reflect what can actually be researched using the available knowledge base materials.
 
     Based on the above considerations, generate a research objective with prominent theme, clear focus, and well-defined scope, with length not exceeding twice the user input.
 
@@ -30,6 +35,7 @@ process:
     1. topic must be coherent text that can independently express complete information
     2. When iteration = 0, provide reasonable focus and optimization
     3. When iteration > 0, adjust based on user feedback
+    4. When knowledge base context is available, ensure topic aligns with KB content
 
   check_satisfaction: |
     Analyze user feedback on the rephrasing result. Only output JSON object:

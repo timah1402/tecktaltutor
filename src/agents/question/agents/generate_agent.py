@@ -189,10 +189,6 @@ class GenerateAgent(BaseAgent):
 
         user_prompt = user_prompt_template.format(
             reference_question=reference_question,
-            requirements=requirements_str,
-            knowledge=knowledge_context[:4000]
-            if len(knowledge_context) > 4000
-            else knowledge_context,
         )
 
         try:

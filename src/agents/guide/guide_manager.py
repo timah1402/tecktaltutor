@@ -46,6 +46,9 @@ class GuidedSession:
 class GuideManager:
     """Guided learning manager"""
 
+    # Class-level cancellation tracking
+    _cancel_flags: dict[str, bool] = {}
+
     def __init__(
         self,
         api_key: str,
@@ -187,10 +190,27 @@ class GuideManager:
             Session creation result
         """
         session_id = str(uuid.uuid4())[:8]
+        
+        # Check for cancellation at start
+        if self._cancel_flags.get(session_id, False):
+            return {
+                "success": False,
+                "error": "Session creation cancelled",
+                "session_id": None,
+            }
 
         locate_result = await self.locate_agent.process(
             notebook_id=notebook_id, notebook_name=notebook_name, records=records
         )
+        
+        # Check for cancellation after processing
+        if self._cancel_flags.get(session_id, False):
+            self._cancel_flags.pop(session_id, None)
+            return {
+                "success": False,
+                "error": "Session creation cancelled",
+                "session_id": None,
+            }
 
         if not locate_result.get("success"):
             return {
@@ -219,6 +239,9 @@ class GuideManager:
         )
 
         self._save_session(session)
+        
+        # Clear cancellation flag if it was set
+        self._cancel_flags.pop(session_id, None)
 
         return {
             "success": True,
@@ -227,6 +250,16 @@ class GuideManager:
             "total_points": len(knowledge_points),
             "message": f"Learning plan created with {len(knowledge_points)} knowledge points",
         }
+
+    @classmethod
+    def cancel_creation(cls, session_id: str):
+        """Cancel ongoing session creation"""
+        cls._cancel_flags[session_id] = True
+
+    @classmethod
+    def clear_cancel_flag(cls, session_id: str):
+        """Clear cancellation flag"""
+        cls._cancel_flags.pop(session_id, None)
 
     def _get_learning_state(
         self, knowledge_points: list[dict[str, Any]], current_index: int

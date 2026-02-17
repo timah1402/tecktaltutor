@@ -27,6 +27,7 @@ class MaterialOrganizerAgent(BaseAgent):
         base_url: str | None = None,
         api_version: str | None = None,
         model: str | None = None,
+        binding: str = "openai",
     ):
         super().__init__(
             module_name="ideagen",
@@ -35,6 +36,7 @@ class MaterialOrganizerAgent(BaseAgent):
             base_url=base_url,
             api_version=api_version,
             model=model,
+            binding=binding,
             language=language,
         )
         self._prompts = get_prompt_manager().load_prompts(

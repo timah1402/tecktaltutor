@@ -13,6 +13,7 @@ project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.agents.base_agent import BaseAgent
+from src.tools.rag_tool import rag_search
 
 from ..utils.json_utils import extract_json_from_text
 
@@ -26,6 +27,7 @@ class RephraseAgent(BaseAgent):
         api_key: str | None = None,
         base_url: str | None = None,
         api_version: str | None = None,
+        binding: str = "openai",
     ):
         language = config.get("system", {}).get("language", "zh")
         super().__init__(
@@ -34,6 +36,7 @@ class RephraseAgent(BaseAgent):
             api_key=api_key,
             base_url=base_url,
             api_version=api_version,
+            binding=binding,
             language=language,
             config=config,
         )
@@ -97,6 +100,35 @@ class RephraseAgent(BaseAgent):
             print(f"User Feedback: {user_input}\n")
             print(f"Conversation History: {len(self.conversation_history)} entries\n")
 
+        # Get KB context if RAG is enabled
+        kb_context = ""
+        rag_cfg = self.config.get("rag", {})
+        kb_name = rag_cfg.get("kb_name")
+        researching_cfg = self.config.get("researching", {})
+        enable_rag = researching_cfg.get("enable_rag_hybrid", True) or researching_cfg.get("enable_rag_naive", True)
+        
+        if enable_rag and kb_name and iteration == 0:
+            # Only retrieve context on first iteration
+            try:
+                print(f"📚 Retrieving context from knowledge base: {kb_name}")
+                rag_mode = rag_cfg.get("default_mode", "hybrid")
+                rag_result = await rag_search(
+                    query=user_input,
+                    kb_name=kb_name,
+                    mode=rag_mode
+                )
+                if rag_result.get("status") == "success":
+                    kb_context = rag_result.get("answer", "")
+                    if kb_context:
+                        print(f"✓ Retrieved {len(kb_context)} chars of context\n")
+                    else:
+                        print("⚠ No relevant context found in knowledge base\n")
+                else:
+                    print(f"⚠ RAG search failed: {rag_result.get('error', 'Unknown error')}\n")
+            except Exception as e:
+                print(f"⚠ Failed to retrieve KB context: {e}\n")
+                # Continue without KB context
+
         # Add current user input to history
         self.conversation_history.append(
             {
@@ -123,12 +155,13 @@ class RephraseAgent(BaseAgent):
         # Format conversation history for prompt
         history_text = self._format_conversation_history()
 
-        # Format user prompt with full history
+        # Format user prompt with full history and KB context
         user_prompt = user_prompt_template.format(
             user_input=user_input,
             iteration=iteration,
             conversation_history=history_text,
             previous_result=history_text,  # For backward compatibility with old templates
+            kb_context=kb_context if kb_context else "No knowledge base context available.",
         )
 
         # Call LLM

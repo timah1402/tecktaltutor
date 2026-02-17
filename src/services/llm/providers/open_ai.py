@@ -21,6 +21,7 @@ class OpenAIProvider(BaseLLMProvider):
         # Note: brotli must be installed for decompression of brotli-compressed responses
         http_client_kwargs = {
             "limits": httpx.Limits(max_connections=100, max_keepalive_connections=20),
+            "timeout": httpx.Timeout(120.0, connect=10.0),  # 120s total, 10s connect timeout
         }
 
         # SSL handling for dev/troubleshooting
@@ -33,6 +34,7 @@ class OpenAIProvider(BaseLLMProvider):
             api_key=self.api_key,
             base_url=self.base_url or None,
             http_client=http_client,
+            timeout=120.0,  # 2 minute timeout for OpenAI API calls
         )
 
     @track_llm_call("openai")
