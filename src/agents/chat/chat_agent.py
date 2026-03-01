@@ -203,6 +203,13 @@ class ChatAgent(BaseAgent):
                         }
                     )
                     self.logger.info(f"RAG retrieved {len(rag_answer)} chars")
+            except ValueError as e:
+                # Handle KB not indexed error
+                error_msg = str(e)
+                self.logger.error(f"RAG KB error: {error_msg}")
+                context_parts.append(
+                    f"[Knowledge Base Error]\n{error_msg}"
+                )
             except Exception as e:
                 self.logger.warning(f"RAG search failed: {e}")
 

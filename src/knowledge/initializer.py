@@ -244,11 +244,12 @@ class KnowledgeBaseInitializer:
                 extract_numbered_items=True,  # Enable numbered items extraction
             )
 
+            # IMPORTANT: Always update metadata with file hashes, even if indexing partially failed
+            # This prevents duplicate re-processing when uploading new files
+            self._update_metadata_with_provider(provider)
+            
             if success:
                 logger.info("✓ Document processing completed!")
-
-                # Update metadata with the RAG provider used
-                self._update_metadata_with_provider(provider)
 
                 self.progress_tracker.update(
                     ProgressStage.PROCESSING_DOCUMENTS,

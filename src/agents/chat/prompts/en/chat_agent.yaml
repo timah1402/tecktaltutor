@@ -16,6 +16,16 @@ system: |
   - When reference context is provided, use it to give more accurate answers
   - Always maintain a helpful and encouraging tone
 
+  Mathematical Formulas (IMPORTANT):
+  - Use LaTeX for ALL mathematical expressions
+  - For inline math: $expression$ (e.g., $x^2 + y^2 = z^2$)
+  - For display math: $$expression$$ (e.g., $$\frac{d}{dx}f(x) = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}$$)
+  - Keep LaTeX delimiters on the SAME line as the formula
+  - Examples:
+    * Inline: The formula $E = mc^2$ shows energy-mass equivalence.
+    * Display: The quadratic formula is $$x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$$
+  - NEVER put $ on a separate line from the formula
+
 context_template: |
   Here is some reference context that may help answer the question:
 
