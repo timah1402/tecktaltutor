@@ -98,12 +98,12 @@ export default function HomePage() {
         // Ensure data is an array before processing
         const kbList = Array.isArray(data) ? data : [];
         setKbs(kbList);
-        if (!chatState.selectedKb && kbList.length > 0) {
-          const defaultKb = kbList.find((kb: KnowledgeBase) => kb.is_default);
-          if (defaultKb) {
-            setChatState((prev) => ({ ...prev, selectedKb: defaultKb.name }));
-          } else {
-            setChatState((prev) => ({ ...prev, selectedKb: kbList[0].name }));
+        // Always set a default KB if one exists and none is selected
+        if (kbList.length > 0) {
+          if (!chatState.selectedKb || chatState.selectedKb === "") {
+            const defaultKb = kbList.find((kb: KnowledgeBase) => kb.is_default);
+            const selectedKbName = defaultKb ? defaultKb.name : kbList[0].name;
+            setChatState((prev) => ({ ...prev, selectedKb: selectedKbName }));
           }
         }
       })
@@ -326,16 +326,30 @@ export default function HomePage() {
             <div className="flex items-center gap-3">
               {/* Mode Toggles */}
               <button
-                onClick={() =>
+                onClick={() => {
+                  // Only allow enabling RAG if a KB is selected
+                  if (!chatState.selectedKb || chatState.selectedKb === "") {
+                    return;
+                  }
                   setChatState((prev) => ({
                     ...prev,
                     enableRag: !prev.enableRag,
-                  }))
+                  }));
+                }}
+                disabled={!chatState.selectedKb || chatState.selectedKb === ""}
+                title={
+                  !chatState.selectedKb || chatState.selectedKb === ""
+                    ? t("Please select a knowledge base first")
+                    : ""
                 }
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                   chatState.enableRag
                     ? "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300"
                     : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                } ${
+                  !chatState.selectedKb || chatState.selectedKb === ""
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:opacity-80 cursor-pointer"
                 }`}
               >
                 <Database className="w-3 h-3" />

@@ -112,6 +112,42 @@ class RAGService:
             result = await service.search("What is ML?", "textbook")
             print(result["answer"])
         """
+        # Validate KB exists and has indexed data
+        kb_dir = Path(self.kb_base_dir) / kb_name
+        if not kb_dir.exists():
+            raise ValueError(
+                f"Knowledge base '{kb_name}' not found. "
+                f"Please create it first using the Knowledge page."
+            )
+
+        # Check if RAG storage is initialized
+        rag_storage_dir = kb_dir / "rag_storage"
+        llamaindex_storage_dir = kb_dir / "llamaindex_storage"
+        
+        # Check if storage directories exist and have content
+        rag_has_content = rag_storage_dir.exists() and any(rag_storage_dir.iterdir())
+        llamaindex_has_content = llamaindex_storage_dir.exists() and any(llamaindex_storage_dir.iterdir())
+        
+        if not (rag_has_content or llamaindex_has_content):
+            raw_dir = kb_dir / "raw"
+            has_docs = raw_dir.exists() and any(raw_dir.iterdir())
+            
+            error_msg = (
+                f"Knowledge base '{kb_name}' exists but has not been indexed yet. "
+            )
+            if has_docs:
+                error_msg += (
+                    f"Documents are present in the 'raw' folder, but RAG indexing did not complete. "
+                    f"Please refresh the knowledge base using the 'Refresh' button on the Knowledge page "
+                    f"to re-index the documents."
+                )
+            else:
+                error_msg += (
+                    f"No documents found. Please upload documents to this knowledge base first."
+                )
+            
+            raise ValueError(error_msg)
+
         # Get the provider from KB metadata, fallback to instance provider
         provider = self._get_provider_for_kb(kb_name)
 
@@ -160,8 +196,23 @@ class RAGService:
                         self.logger.info(f"Using provider '{provider}' from KB metadata")
                         return provider
 
+            # Fallback based on directory structure (robustness check)
+            # This aligns with DocumentAdder logic to support KBs created without metadata
+            kb_dir = Path(self.kb_base_dir) / kb_name
+            llamaindex_storage = kb_dir / "llamaindex_storage"
+            rag_storage = kb_dir / "rag_storage"
+            
+            # Check which storage actually has data (not just exists)
+            if llamaindex_storage.exists() and any(llamaindex_storage.iterdir()):
+                self.logger.info(f"Detected LlamaIndex storage with data for '{kb_name}', using provider: llamaindex")
+                return "llamaindex"
+            
+            if rag_storage.exists() and any(rag_storage.iterdir()):
+                self.logger.info(f"Detected RAG storage with data for '{kb_name}', using default provider: {self.provider}")
+                return self.provider
+
             # Fallback to instance provider
-            self.logger.info(f"No provider in metadata, using instance provider: {self.provider}")
+            self.logger.info(f"No provider in metadata or storage with data, using instance provider: {self.provider}")
             return self.provider
 
         except Exception as e:

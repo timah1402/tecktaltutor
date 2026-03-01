@@ -396,9 +396,18 @@ class KnowledgeBaseManager:
         if not rag_provider:
             rag_provider = kb_config.get("rag_provider")
 
-        rag_initialized = (
-            dir_exists and rag_storage_dir and rag_storage_dir.exists() and rag_storage_dir.is_dir()
-        )
+        # Check both rag_storage (LightRAG/RAGAnything) and llamaindex_storage
+        rag_initialized = False
+        if dir_exists:
+            # Check LightRAG/RAGAnything storage
+            if rag_storage_dir and rag_storage_dir.exists():
+                rag_initialized = any(rag_storage_dir.iterdir())
+            
+            # Check LlamaIndex storage
+            if not rag_initialized:
+                llamaindex_storage_dir = kb_dir / "llamaindex_storage"
+                if llamaindex_storage_dir.exists():
+                    rag_initialized = any(llamaindex_storage_dir.iterdir())
 
         info["statistics"] = {
             "raw_documents": raw_count,
