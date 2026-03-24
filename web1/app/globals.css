@@ -3,28 +3,64 @@
 @tailwind utilities;
 
 :root {
-  --bg-gradient: linear-gradient(160deg, #e8eef8 0%, #dce6f5 40%, #e4eaf6 100%);
+  --bg-deep: #e8eef8;
+  --bg-surface: #dce6f5;
+  --accent: #4f8ef7;
+  --accent-violet: #7c5ef8;
+  --accent-cyan: #06b6d4;
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.88);
 }
 
+html,
 body {
-  background: var(--bg-gradient);
+  background: linear-gradient(160deg, #e8eef8 0%, #dce6f5 40%, #e4eaf6 100%);
+  color: #1e293b;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
-/* Staggered bar animations */
-.bar:nth-child(1) { animation-delay: 0s; }
-.bar:nth-child(2) { animation-delay: 0.15s; }
-.bar:nth-child(3) { animation-delay: 0.3s; }
-.bar:nth-child(4) { animation-delay: 0.05s; }
-.bar:nth-child(5) { animation-delay: 0.25s; }
-.bar:nth-child(6) { animation-delay: 0.1s; }
-.bar:nth-child(7) { animation-delay: 0.2s; }
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(150, 175, 220, 0.35); border-radius: 4px; }
 
-/* Staggered ring pulse */
-.ring-outer { animation-delay: 0s; }
-.ring-mid   { animation-delay: 0.4s; }
+/* Glass morphism — light */
+.glass {
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 24px rgba(100, 130, 200, 0.1), 0 1px 0 rgba(255,255,255,0.9) inset;
+}
 
-/* Staggered typing dots */
-.dot:nth-child(1) { animation-delay: 0s; }
-.dot:nth-child(2) { animation-delay: 0.2s; }
-.dot:nth-child(3) { animation-delay: 0.4s; }
+.glass-bright {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 28px rgba(100, 130, 200, 0.12), 0 1px 0 rgba(255,255,255,1) inset;
+}
+
+/* Neumorphic button */
+.neumorph {
+  background: linear-gradient(145deg, #e4ecf9, #d4e0f2);
+  box-shadow: 4px 4px 10px rgba(150, 175, 220, 0.35), -3px -3px 8px rgba(255, 255, 255, 0.8);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #4f8ef7, #7c5ef8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Staggered bar delays for voice orb */
+.bar-1 { animation-delay: 0s; }
+.bar-2 { animation-delay: 0.12s; }
+.bar-3 { animation-delay: 0.24s; }
+.bar-4 { animation-delay: 0.06s; }
+.bar-5 { animation-delay: 0.18s; }
+.bar-6 { animation-delay: 0.09s; }
+.bar-7 { animation-delay: 0.21s; }
