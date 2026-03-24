@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+// @ts-ignore
+import "katex/dist/katex.min.css";
 import { VoiceProvider } from "./providers/VoiceProvider";
 
 const font = Inter({ subsets: ["latin"], display: "swap" });

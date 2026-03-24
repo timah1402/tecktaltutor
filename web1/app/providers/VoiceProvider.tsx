@@ -11,7 +11,13 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-export type VoiceStatus = "idle" | "listening" | "processing" | "thinking";
+export type VoiceStatus = "idle" | "listening" | "processing" | "thinking" | "speaking";
+
+export interface HistoryItem {
+  id: string;
+  query: string;
+  written: string;
+}
 
 interface VoiceCtx {
   isListening: boolean;
@@ -21,6 +27,8 @@ interface VoiceCtx {
   aiResponse: string | null;
   lastQuery: string | null;
   isThinking: boolean;
+  history: HistoryItem[];
+  clearHistory: () => void;
   clearResponse: () => void;
   toggleListening: () => void;
   startListening: () => void;
@@ -61,7 +69,7 @@ const UI_COMMANDS = [
   { pattern: /\b(upload|attach|file|document)\b/i, action: "UPLOAD" },
 ];
 
-async function askOpenAI(message: string): Promise<string> {
+async function askOpenAI(message: string): Promise<{ spoken: string; written: string }> {
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -69,9 +77,15 @@ async function askOpenAI(message: string): Promise<string> {
       body: JSON.stringify({ message }),
     });
     const data = await res.json();
-    return data.answer ?? "Sorry, I could not get a response.";
+    return {
+      spoken: data.spoken ?? "Sorry, I could not get a response.",
+      written: data.written ?? data.spoken ?? "Sorry, I could not get a response.",
+    };
   } catch {
-    return "Sorry, something went wrong.";
+    return {
+      spoken: "Sorry, something went wrong.",
+      written: "Sorry, something went wrong.",
+    };
   }
 }
 
@@ -86,9 +100,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [isThinking, setIsThinking] = useState(false);
   const [showInput, setShowInput] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const recognitionRef = useRef<any>(null);
   const manualStop = useRef(false);
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startListeningRef = useRef<() => void>(() => {});
+  // True while TTS is actively playing — lets processText interrupt it
+  const isTTSSpeaking = useRef(false);
 
   const clearResponse = useCallback(() => {
     setAiResponse(null);
@@ -96,12 +114,74 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setIsThinking(false);
   }, []);
 
+  const clearHistory = useCallback(() => setHistory([]), []);
+
+  const speakAnswer = useCallback((text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+    // Stop mic before TTS starts
+    manualStop.current = true;
+    if (restartTimer.current) clearTimeout(restartTimer.current);
+    recognitionRef.current?.stop();
+    setIsListening(false);
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    utterance.onstart = () => {
+      isTTSSpeaking.current = true;
+      setVoiceStatus("speaking");
+      // Restart mic ~700ms in so user can interrupt the AI while it talks
+      setTimeout(() => {
+        if (isTTSSpeaking.current) {
+          manualStop.current = false;
+          startListeningRef.current();
+        }
+      }, 700);
+    };
+
+    utterance.onend = () => {
+      isTTSSpeaking.current = false;
+      // mic already restarted from onstart — nothing else needed
+    };
+
+    utterance.onerror = () => {
+      isTTSSpeaking.current = false;
+    };
+
+    setTimeout(() => {
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(
+        (v) =>
+          v.lang.startsWith("en") &&
+          (v.name.includes("Samantha") ||
+            v.name.includes("Google US English") ||
+            v.name.includes("Karen") ||
+            v.name.includes("Daniel") ||
+            v.name.includes("Zira"))
+      );
+      if (preferred) utterance.voice = preferred;
+      window.speechSynthesis.speak(utterance);
+    }, 350);
+  }, []);
+
   const processText = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
 
-      // Check UI commands first
+      // If AI is currently speaking, interrupt it and process the new input
+      if (isTTSSpeaking.current) {
+        window.speechSynthesis?.cancel();
+        isTTSSpeaking.current = false;
+      }
+
+      // UI commands
       for (const cmd of UI_COMMANDS) {
         if (cmd.pattern.test(trimmed)) {
           if (cmd.action === "KEYBOARD") {
@@ -119,7 +199,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Check nav commands
+      // Nav commands
       for (const cmd of NAV_COMMANDS) {
         if (cmd.pattern.test(trimmed)) {
           setLastCommand(cmd.label);
@@ -138,16 +218,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Otherwise: send to OpenAI as a question/search
+      // Ask AI — speak the short version, show the full written version
       setLastQuery(trimmed);
       setIsThinking(true);
       setVoiceStatus("thinking");
-      const answer = await askOpenAI(trimmed);
-      setAiResponse(answer);
+      const { spoken, written } = await askOpenAI(trimmed);
+      setAiResponse(written);
+      setHistory((prev) => [...prev, { id: Date.now().toString(), query: trimmed, written }]);
       setIsThinking(false);
-      setVoiceStatus("listening");
+      speakAnswer(spoken);
     },
-    [router, clearResponse]
+    [router, clearResponse, speakAnswer]
   );
 
   const startListening = useCallback(() => {
@@ -167,7 +248,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     rec.onstart = () => {
       setIsListening(true);
-      setVoiceStatus("listening");
+      // Keep "speaking" status visible while TTS is still going
+      if (!isTTSSpeaking.current) setVoiceStatus("listening");
       setTranscript("");
     };
 
@@ -186,8 +268,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     rec.onerror = (e: any) => {
       if (e.error === "aborted") return;
       setIsListening(false);
-      setVoiceStatus("idle");
-      // auto-restart on error unless manual stop
+      if (!isTTSSpeaking.current) setVoiceStatus("idle");
       if (!manualStop.current) {
         restartTimer.current = setTimeout(() => startListening(), 1500);
       }
@@ -195,10 +276,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     rec.onend = () => {
       setIsListening(false);
-      // auto-restart unless manual stop
       if (!manualStop.current) {
         restartTimer.current = setTimeout(() => startListening(), 300);
-      } else {
+      } else if (!isTTSSpeaking.current) {
         setVoiceStatus("idle");
       }
     };
@@ -208,7 +288,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     try { rec.start(); } catch {}
   }, [processText]);
 
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
+
   const stopListening = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    isTTSSpeaking.current = false;
     manualStop.current = true;
     if (restartTimer.current) clearTimeout(restartTimer.current);
     recognitionRef.current?.stop();
@@ -217,7 +303,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleListening = useCallback(() => {
-    if (isListening || voiceStatus === "thinking") {
+    if (isListening || voiceStatus === "thinking" || voiceStatus === "speaking") {
       stopListening();
     } else {
       manualStop.current = false;
@@ -225,7 +311,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
   }, [isListening, voiceStatus, startListening, stopListening]);
 
-  // Auto-start on mount
   useEffect(() => {
     const timer = setTimeout(() => {
       manualStop.current = false;
@@ -236,6 +321,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (restartTimer.current) clearTimeout(restartTimer.current);
       manualStop.current = true;
       recognitionRef.current?.stop();
+      window.speechSynthesis?.cancel();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -250,6 +336,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         aiResponse,
         lastQuery,
         isThinking,
+        history,
+        clearHistory,
         clearResponse,
         toggleListening,
         startListening,
