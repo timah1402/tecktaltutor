@@ -272,3 +272,6 @@ celerybeat.pid
 *.wav
 *.ogg
 !demo/*.mp4
+web1/.env.local
+web1/.env.local
+web1/.env.local
