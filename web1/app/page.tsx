@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Microscope, PenTool, GraduationCap, Edit3,
   Calculator, Lightbulb, BookOpen, Book, PhoneCall, Trash2,
-  ArrowLeft,
+  ArrowLeft, Home, History,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
@@ -12,6 +12,7 @@ import rehypeKatex from "rehype-katex";
 import AppShell from "./components/AppShell";
 import VoiceOrb from "./components/VoiceOrb";
 import GlassCard from "./components/GlassCard";
+import InputBar from "./components/InputBar";
 import ResearchPage   from "./research/page";
 import QuestionPage   from "./question/page";
 import SolverPage     from "./solver/page";
@@ -21,6 +22,7 @@ import IdeaGenPage    from "./ideagen/page";
 import KnowledgePage  from "./knowledge/page";
 import NotebookPage   from "./notebook/page";
 import VoicePage      from "./voice/page";
+import HistoryPage    from "./history/page";
 import { useVoice } from "./providers/VoiceProvider";
 
 const MOCK_KBS = [
@@ -32,6 +34,8 @@ const MOCK_KBS = [
 ];
 
 const QUICK_ACTIONS = [
+  { label: "Home",      icon: Home,          href: "/",           color: "#4f8ef7", bg: "rgba(79,142,247,0.1)"  },
+  { label: "History",   icon: History,       href: "/history",    color: "#64748b", bg: "rgba(100,116,139,0.1)" },
   { label: "Research",  icon: Microscope,    href: "/research",   color: "#4f8ef7", bg: "rgba(79,142,247,0.1)"  },
   { label: "Questions", icon: PenTool,       href: "/question",   color: "#8b5cf6", bg: "rgba(139,92,246,0.1)" },
   { label: "Solver",    icon: Calculator,    href: "/solver",     color: "#06b6d4", bg: "rgba(6,182,212,0.1)"  },
@@ -46,6 +50,7 @@ const QUICK_ACTIONS = [
 // Renders the real page component embedded (no AppShell wrapper)
 function getPanelContent(href: string) {
   switch (href) {
+    case "/history":  return <HistoryPage   isEmbedded />;
     case "/research":  return <ResearchPage  isEmbedded />;
     case "/question":  return <QuestionPage  isEmbedded />;
     case "/solver":    return <SolverPage    isEmbedded />;
@@ -76,7 +81,7 @@ export default function HomePage() {
   }, [history, isThinking]);
 
   return (
-    <AppShell>
+    <AppShell hideInputBar>
       <div className="flex h-full overflow-hidden">
 
         {/* ── LEFT PANEL: Voice + Quick Actions (always visible) ── */}
@@ -116,7 +121,7 @@ export default function HomePage() {
               {QUICK_ACTIONS.map((action) => (
                 <GlassCard
                   key={action.href}
-                  onClick={() => setActivePanel(action.href)}
+                  onClick={() => action.href === "/" ? setActivePanel(null) : setActivePanel(action.href)}
                   glow="blue"
                   className="p-2.5 flex flex-col items-center gap-1 cursor-pointer active:scale-95 transition-transform"
                 >
@@ -176,11 +181,11 @@ export default function HomePage() {
         </div>
 
         {/* ── RIGHT PANEL: Conversation + Action Overlay ──────── */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="flex-1 flex flex-col overflow-hidden relative" style={{ minWidth: 0 }}>
 
           {/* ── Conversation ──────────────────────────────────── */}
           <div
-            className="flex flex-col h-full transition-all duration-300"
+            className="flex flex-col flex-1 overflow-hidden transition-all duration-300"
             style={{ opacity: activePanel ? 0.15 : 1, pointerEvents: activePanel ? "none" : "auto" }}
           >
             {/* Header */}
@@ -391,6 +396,9 @@ export default function HomePage() {
               </div>
             </div>
           )}
+
+          {/* Input bar — scoped to the conversation column */}
+          <InputBar />
         </div>
       </div>
     </AppShell>

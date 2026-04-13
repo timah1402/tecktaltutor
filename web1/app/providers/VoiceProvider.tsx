@@ -33,6 +33,7 @@ interface VoiceCtx {
   toggleListening: () => void;
   startListening: () => void;
   stopListening: () => void;
+  sendTextMessage: (text: string) => void;
   showInput: boolean;
   setShowInput: (v: boolean) => void;
   sidebarOpen: boolean;
@@ -113,6 +114,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   // ── Realtime API event handler ───────────────────────────────────────────
   const handleServerEvent = useCallback((event: any) => {
+    // Ignore all events after an intentional disconnect
+    if (manualStop.current) return;
+
     switch (event.type) {
 
       // User voice detected
@@ -217,7 +221,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     dcRef.current?.close();
     pcRef.current?.close();
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    if (audioRef.current) { audioRef.current.srcObject = null; }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.srcObject = null;
+      audioRef.current = null;
+    }
     pcRef.current     = null;
     dcRef.current     = null;
     streamRef.current = null;
@@ -239,17 +247,27 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ voice: "alloy" }),
       });
       const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || tokenData.error) {
+        console.warn("[VoiceProvider] Session error:", tokenData.error ?? tokenRes.status);
+        pcRef.current = null;
+        return;
+      }
       const ephemeralKey = tokenData.client_secret?.value;
       if (!ephemeralKey) return;
 
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
-      // AI audio output
+      // AI audio output — tear down any previous element first
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.srcObject = null;
+        audioRef.current = null;
+      }
       const audio = new Audio();
       audio.autoplay = true;
       audioRef.current = audio;
-      pc.ontrack = (e) => { audio.srcObject = e.streams[0]; };
+      pc.ontrack = (e) => { audioRef.current!.srcObject = e.streams[0]; };
 
       // Mic input — echo cancellation prevents AI from hearing itself
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -270,6 +288,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         try { handleServerEvent(JSON.parse(e.data)); } catch {}
       };
       dc.onopen = () => {
+        if (manualStop.current) return;
         setVoiceStatus("listening");
         setIsListening(true);
       };
@@ -315,19 +334,46 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleServerEvent]);
 
-  // Auto-connect on mount; fully disconnect on unmount
+  // Disconnect cleanly on unmount
   useEffect(() => {
-    const timer = setTimeout(() => connect(), 800);
-    return () => {
-      clearTimeout(timer);
-      disconnect();
-    };
+    return () => { disconnect(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Public controls ───────────────────────────────────────────────────────
   const startListening = useCallback(() => connect(), [connect]);
   const stopListening  = useCallback(() => disconnect(), [disconnect]);
+
+  const sendTextMessage = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    pendingQueryRef.current = trimmed;
+    setLastQuery(trimmed);
+    setIsThinking(true);
+    setVoiceStatus("thinking");
+
+    if (dcRef.current?.readyState === "open") {
+      dcRef.current.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: trimmed }],
+        },
+      }));
+      dcRef.current.send(JSON.stringify({ type: "response.create" }));
+    } else {
+      // Not connected — show the message immediately with a fallback reply
+      setHistory((prev) => [
+        ...prev,
+        { id: Date.now().toString(), query: trimmed, written: "*(Voice session not active — connect a microphone to get an AI reply.)*" },
+      ]);
+      setIsThinking(false);
+      setVoiceStatus("idle");
+      pendingQueryRef.current = "";
+    }
+  }, []);
 
   const toggleListening = useCallback(() => {
     if (isListening || voiceStatus === "thinking" || voiceStatus === "speaking") {
@@ -353,6 +399,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         toggleListening,
         startListening,
         stopListening,
+        sendTextMessage,
         showInput,
         setShowInput,
         sidebarOpen,

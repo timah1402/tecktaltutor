@@ -10,7 +10,7 @@ type AttachedFile = {
 };
 
 export default function InputBar() {
-  const { showInput, setShowInput, toggleListening, isListening, voiceStatus } = useVoice();
+  const { showInput, setShowInput, toggleListening, isListening, voiceStatus, sendTextMessage } = useVoice();
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,9 +50,9 @@ export default function InputBar() {
 
   const handleSend = () => {
     if (!text.trim() && attachments.length === 0) return;
+    if (text.trim()) sendTextMessage(text.trim());
     setText("");
     setAttachments([]);
-    setShowInput(false);
   };
 
   const neumorph = {

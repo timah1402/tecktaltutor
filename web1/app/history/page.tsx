@@ -223,7 +223,7 @@ Global average surface temperature in 2023 was approximately 1.45°C above pre-i
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function HistoryPage() {
+export default function HistoryPage({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<Entry | null>(null);
@@ -240,8 +240,8 @@ export default function HistoryPage() {
     return acc;
   }, {});
 
-  return (
-    <AppShell>
+  const inner = (
+    <>
       <div className="flex flex-col h-full">
 
         {/* ── Top bar ──────────────────────────────────────────── */}
@@ -538,6 +538,8 @@ export default function HistoryPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </>
   );
+
+  return isEmbedded ? inner : <AppShell>{inner}</AppShell>;
 }
