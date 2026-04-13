@@ -2,7 +2,7 @@
 import {
   Home, History, BookOpen, Book, PenTool, Calculator,
   GraduationCap, Lightbulb, Microscope, Edit3, Settings,
-  ChevronsRight, Mic, PhoneCall,
+  ChevronsRight, Mic,
 } from "lucide-react";
 import { useVoice } from "../providers/VoiceProvider";
 import { usePathname } from "next/navigation";
@@ -12,7 +12,6 @@ const NAV_GROUPS = [
     label: "Workspace",
     items: [
       { name: "Home", href: "/", icon: Home, cmd: "say 'home'" },
-      { name: "Voice Chat", href: "/voice", icon: PhoneCall, cmd: "say 'voice'" },
       { name: "History", href: "/history", icon: History, cmd: "say 'history'" },
       { name: "Knowledge Bases", href: "/knowledge", icon: BookOpen, cmd: "say 'knowledge'" },
       { name: "Notebooks", href: "/notebook", icon: Book, cmd: "say 'notebook'" },

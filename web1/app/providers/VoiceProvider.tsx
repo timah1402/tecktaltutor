@@ -48,283 +48,294 @@ export function useVoice() {
 }
 
 const NAV_COMMANDS = [
-  { pattern: /\b(go home|open home|home|dashboard)\b/i, path: "/", label: "→ Home" },
-  { pattern: /\b(go back|back|previous page|return)\b/i, path: "BACK", label: "← Go Back" },
-  { pattern: /\b(history|past sessions|conversations)\b/i, path: "/history", label: "→ History" },
-  { pattern: /\b(knowledge|knowledge base|documents)\b/i, path: "/knowledge", label: "→ Knowledge Base" },
-  { pattern: /\b(notebook|notes|note)\b/i, path: "/notebook", label: "→ Notebooks" },
-  { pattern: /\b(question generator|questions|generate questions)\b/i, path: "/question", label: "→ Question Generator" },
-  { pattern: /\b(smart solver|solver|solve|math)\b/i, path: "/solver", label: "→ Smart Solver" },
-  { pattern: /\b(guided learning|learning|guide|learn)\b/i, path: "/guide", label: "→ Guided Learning" },
-  { pattern: /\b(idea gen|ideagen|ideas|brainstorm)\b/i, path: "/ideagen", label: "→ IdeaGen" },
-  { pattern: /\b(deep research|research)\b/i, path: "/research", label: "→ Deep Research" },
-  { pattern: /\b(co.?writer|writing|co write)\b/i, path: "/co_writer", label: "→ Co-Writer" },
-  { pattern: /\b(settings|preferences)\b/i, path: "/settings", label: "→ Settings" },
+  { pattern: /\b(go home|open home|home|dashboard)\b/i,              path: "/",          label: "→ Home" },
+  { pattern: /\b(go back|back|previous page|return)\b/i,             path: "BACK",       label: "← Go Back" },
+  { pattern: /\b(history|past sessions|conversations)\b/i,           path: "/history",   label: "→ History" },
+  { pattern: /\b(knowledge|knowledge base|documents)\b/i,            path: "/knowledge", label: "→ Knowledge Base" },
+  { pattern: /\b(notebook|notes|note)\b/i,                           path: "/notebook",  label: "→ Notebooks" },
+  { pattern: /\b(question generator|questions|generate questions)\b/i,path: "/question",  label: "→ Question Generator" },
+  { pattern: /\b(smart solver|solver|solve|math)\b/i,                path: "/solver",    label: "→ Smart Solver" },
+  { pattern: /\b(guided learning|learning|guide|learn)\b/i,          path: "/guide",     label: "→ Guided Learning" },
+  { pattern: /\b(idea gen|ideagen|ideas|brainstorm)\b/i,             path: "/ideagen",   label: "→ IdeaGen" },
+  { pattern: /\b(deep research|research)\b/i,                        path: "/research",  label: "→ Deep Research" },
+  { pattern: /\b(co.?writer|writing|co write)\b/i,                   path: "/co_writer", label: "→ Co-Writer" },
+  { pattern: /\b(settings|preferences)\b/i,                          path: "/settings",  label: "→ Settings" },
 ];
 
 const UI_COMMANDS = [
   { pattern: /\b(type|keyboard|show keyboard|text input)\b/i, action: "KEYBOARD" },
-  { pattern: /\b(open menu|menu|navigation|sidebar)\b/i, action: "MENU" },
-  { pattern: /\b(close|dismiss|clear|hide)\b/i, action: "CLEAR" },
-  { pattern: /\b(upload|attach|file|document)\b/i, action: "UPLOAD" },
+  { pattern: /\b(open menu|menu|navigation|sidebar)\b/i,      action: "MENU" },
+  { pattern: /\b(close|dismiss|clear|hide)\b/i,               action: "CLEAR" },
 ];
-
-async function askOpenAI(message: string): Promise<{ spoken: string; written: string }> {
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-    });
-    const data = await res.json();
-    return {
-      spoken: data.spoken ?? "Sorry, I could not get a response.",
-      written: data.written ?? data.spoken ?? "Sorry, I could not get a response.",
-    };
-  } catch {
-    return {
-      spoken: "Sorry, something went wrong.",
-      written: "Sorry, something went wrong.",
-    };
-  }
-}
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [isListening, setIsListening] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
-  const [transcript, setTranscript] = useState("");
-  const [lastCommand, setLastCommand] = useState<string | null>(null);
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [lastQuery, setLastQuery] = useState<string | null>(null);
-  const [isThinking, setIsThinking] = useState(false);
-  const [showInput, setShowInput] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const recognitionRef = useRef<any>(null);
+
+  const [isListening,  setIsListening]  = useState(false);
+  const [voiceStatus,  setVoiceStatus]  = useState<VoiceStatus>("idle");
+  const [transcript,   setTranscript]   = useState("");
+  const [lastCommand,  setLastCommand]  = useState<string | null>(null);
+  const [aiResponse,   setAiResponse]   = useState<string | null>(null);
+  const [lastQuery,    setLastQuery]    = useState<string | null>(null);
+  const [isThinking,   setIsThinking]   = useState(false);
+  const [showInput,    setShowInput]    = useState(false);
+  const [sidebarOpen,  setSidebarOpen]  = useState(false);
+  const [history,      setHistory]      = useState<HistoryItem[]>([]);
+
+  // WebRTC refs
+  const pcRef     = useRef<RTCPeerConnection | null>(null);
+  const dcRef     = useRef<RTCDataChannel | null>(null);
+  const audioRef  = useRef<HTMLAudioElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Prevents the auto-reconnect from firing after an intentional stop
   const manualStop = useRef(false);
-  const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startListeningRef = useRef<() => void>(() => {});
-  // True while TTS is actively playing — lets processText interrupt it
-  const isTTSSpeaking = useRef(false);
+
+  // Pending conversation accumulation
+  const pendingQueryRef    = useRef<string>("");
+  const pendingResponseRef = useRef<{ id: string; text: string } | null>(null);
+
+  // Stable refs so event handler closure never goes stale
+  const routerRef         = useRef(router);
+  const setShowInputRef   = useRef(setShowInput);
+  const setSidebarRef     = useRef(setSidebarOpen);
+  const clearResponseRef  = useRef<() => void>(() => {});
+  useEffect(() => { routerRef.current = router; }, [router]);
 
   const clearResponse = useCallback(() => {
     setAiResponse(null);
     setLastQuery(null);
     setIsThinking(false);
   }, []);
+  useEffect(() => { clearResponseRef.current = clearResponse; }, [clearResponse]);
 
   const clearHistory = useCallback(() => setHistory([]), []);
 
-  const speakAnswer = useCallback((text: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
+  // ── Realtime API event handler ───────────────────────────────────────────
+  const handleServerEvent = useCallback((event: any) => {
+    switch (event.type) {
 
-    // Stop mic before TTS starts
-    manualStop.current = true;
-    if (restartTimer.current) clearTimeout(restartTimer.current);
-    recognitionRef.current?.stop();
-    setIsListening(false);
+      // User voice detected
+      case "input_audio_buffer.speech_started":
+        setIsListening(true);
+        setVoiceStatus("listening");
+        setTranscript("");
+        break;
 
-    window.speechSynthesis.cancel();
+      // User stopped speaking — AI is processing
+      case "input_audio_buffer.speech_stopped":
+        setIsListening(false);
+        setVoiceStatus("thinking");
+        setIsThinking(true);
+        break;
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 1.05;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
+      // Final user transcript
+      case "conversation.item.input_audio_transcription.completed": {
+        const userText = event.transcript?.trim();
+        if (!userText) break;
 
-    utterance.onstart = () => {
-      isTTSSpeaking.current = true;
-      setVoiceStatus("speaking");
-      // Restart mic ~700ms in so user can interrupt the AI while it talks
-      setTimeout(() => {
-        if (isTTSSpeaking.current) {
-          manualStop.current = false;
-          startListeningRef.current();
-        }
-      }, 700);
-    };
+        setTranscript(userText);
+        pendingQueryRef.current = userText;
+        setLastQuery(userText);
 
-    utterance.onend = () => {
-      isTTSSpeaking.current = false;
-      // mic already restarted from onstart — nothing else needed
-    };
-
-    utterance.onerror = () => {
-      isTTSSpeaking.current = false;
-    };
-
-    setTimeout(() => {
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(
-        (v) =>
-          v.lang.startsWith("en") &&
-          (v.name.includes("Samantha") ||
-            v.name.includes("Google US English") ||
-            v.name.includes("Karen") ||
-            v.name.includes("Daniel") ||
-            v.name.includes("Zira"))
-      );
-      if (preferred) utterance.voice = preferred;
-      window.speechSynthesis.speak(utterance);
-    }, 350);
-  }, []);
-
-  const processText = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-
-      // If AI is currently speaking, interrupt it and process the new input
-      if (isTTSSpeaking.current) {
-        window.speechSynthesis?.cancel();
-        isTTSSpeaking.current = false;
-      }
-
-      // UI commands
-      for (const cmd of UI_COMMANDS) {
-        if (cmd.pattern.test(trimmed)) {
-          if (cmd.action === "KEYBOARD") {
-            setShowInput(true);
-            setLastCommand("Show keyboard");
-          } else if (cmd.action === "MENU") {
-            setSidebarOpen(true);
-            setLastCommand("Open menu");
-          } else if (cmd.action === "CLEAR") {
-            clearResponse();
-            setLastCommand("Cleared");
-          }
-          setTimeout(() => setLastCommand(null), 2000);
-          return;
-        }
-      }
-
-      // Nav commands
-      for (const cmd of NAV_COMMANDS) {
-        if (cmd.pattern.test(trimmed)) {
-          setLastCommand(cmd.label);
-          setVoiceStatus("processing");
-          setSidebarOpen(false);
-          setTimeout(() => {
-            if (cmd.path === "BACK") {
-              router.back();
-            } else {
-              router.push(cmd.path);
-            }
-            setVoiceStatus("listening");
+        // UI commands
+        for (const cmd of UI_COMMANDS) {
+          if (cmd.pattern.test(userText)) {
+            if (cmd.action === "KEYBOARD") setShowInputRef.current(true);
+            else if (cmd.action === "MENU")  setSidebarRef.current(true);
+            else if (cmd.action === "CLEAR") clearResponseRef.current();
+            setLastCommand(cmd.action === "KEYBOARD" ? "Show keyboard" : cmd.action === "MENU" ? "Open menu" : "Cleared");
             setTimeout(() => setLastCommand(null), 2000);
-          }, 350);
-          return;
+            return;
+          }
         }
+
+        // Nav commands — cancel AI reply and navigate
+        for (const cmd of NAV_COMMANDS) {
+          if (cmd.pattern.test(userText)) {
+            setLastCommand(cmd.label);
+            setVoiceStatus("processing");
+            setSidebarRef.current(false);
+            try { dcRef.current?.send(JSON.stringify({ type: "response.cancel" })); } catch {}
+            setTimeout(() => {
+              if (cmd.path === "BACK") routerRef.current.back();
+              else routerRef.current.push(cmd.path);
+              setTimeout(() => setLastCommand(null), 2000);
+            }, 350);
+            return;
+          }
+        }
+        break;
       }
 
-      // Ask AI — speak the short version, show the full written version
-      setLastQuery(trimmed);
-      setIsThinking(true);
-      setVoiceStatus("thinking");
-      const { spoken, written } = await askOpenAI(trimmed);
-      setAiResponse(written);
-      setHistory((prev) => [...prev, { id: Date.now().toString(), query: trimmed, written }]);
-      setIsThinking(false);
-      speakAnswer(spoken);
-    },
-    [router, clearResponse, speakAnswer]
-  );
+      // AI audio starts — it's speaking
+      case "response.audio.started":
+        setIsThinking(false);
+        setVoiceStatus("speaking");
+        break;
 
-  const startListening = useCallback(() => {
-    if (typeof window === "undefined") return;
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      // Accumulate AI transcript
+      case "response.audio_transcript.delta":
+        if (event.delta) {
+          if (!pendingResponseRef.current || pendingResponseRef.current.id !== event.item_id) {
+            pendingResponseRef.current = { id: event.item_id ?? Date.now().toString(), text: event.delta };
+          } else {
+            pendingResponseRef.current.text += event.delta;
+          }
+        }
+        break;
+
+      // AI transcript fully done — commit ONE entry to history here only
+      case "response.audio_transcript.done": {
+        const text = pendingResponseRef.current?.text;
+        if (text) {
+          const query = pendingQueryRef.current || "…";
+          setHistory((prev) => [...prev, { id: Date.now().toString(), query, written: text }]);
+          setAiResponse(text);
+          pendingQueryRef.current = "";
+          pendingResponseRef.current = null;
+        }
+        break;
+      }
+
+      // AI audio fully done — back to listening
+      case "response.audio.done":
+        setVoiceStatus("listening");
+        setIsListening(true);
+        setIsThinking(false);
+        break;
+
+      // response.done: intentionally NOT adding to history here (would be a duplicate)
+      case "response.done":
+        break;
     }
-    const SR =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-
-    rec.onstart = () => {
-      setIsListening(true);
-      // Keep "speaking" status visible while TTS is still going
-      if (!isTTSSpeaking.current) setVoiceStatus("listening");
-      setTranscript("");
-    };
-
-    rec.onresult = (e: any) => {
-      let final = "";
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      const text = final || interim;
-      setTranscript(text);
-      if (final) processText(final);
-    };
-
-    rec.onerror = (e: any) => {
-      if (e.error === "aborted") return;
-      setIsListening(false);
-      if (!isTTSSpeaking.current) setVoiceStatus("idle");
-      if (!manualStop.current) {
-        restartTimer.current = setTimeout(() => startListening(), 1500);
-      }
-    };
-
-    rec.onend = () => {
-      setIsListening(false);
-      if (!manualStop.current) {
-        restartTimer.current = setTimeout(() => startListening(), 300);
-      } else if (!isTTSSpeaking.current) {
-        setVoiceStatus("idle");
-      }
-    };
-
-    recognitionRef.current = rec;
-    manualStop.current = false;
-    try { rec.start(); } catch {}
-  }, [processText]);
-
-  useEffect(() => {
-    startListeningRef.current = startListening;
-  }, [startListening]);
-
-  const stopListening = useCallback(() => {
-    window.speechSynthesis?.cancel();
-    isTTSSpeaking.current = false;
-    manualStop.current = true;
-    if (restartTimer.current) clearTimeout(restartTimer.current);
-    recognitionRef.current?.stop();
-    setIsListening(false);
-    setVoiceStatus("idle");
   }, []);
 
-  const toggleListening = useCallback(() => {
-    if (isListening || voiceStatus === "thinking" || voiceStatus === "speaking") {
-      stopListening();
-    } else {
-      manualStop.current = false;
-      startListening();
-    }
-  }, [isListening, voiceStatus, startListening, stopListening]);
+  // ── Disconnect ────────────────────────────────────────────────────────────
+  const disconnect = useCallback(() => {
+    manualStop.current = true;
+    dcRef.current?.close();
+    pcRef.current?.close();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    if (audioRef.current) { audioRef.current.srcObject = null; }
+    pcRef.current     = null;
+    dcRef.current     = null;
+    streamRef.current = null;
+    setVoiceStatus("idle");
+    setIsListening(false);
+    setIsThinking(false);
+    setTranscript("");
+  }, []);
 
+  // ── Connect via WebRTC ────────────────────────────────────────────────────
+  const connect = useCallback(async () => {
+    if (pcRef.current) return; // already connected
+    manualStop.current = false;
+
+    try {
+      const tokenRes = await fetch("/api/realtime-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice: "alloy" }),
+      });
+      const tokenData = await tokenRes.json();
+      const ephemeralKey = tokenData.client_secret?.value;
+      if (!ephemeralKey) return;
+
+      const pc = new RTCPeerConnection();
+      pcRef.current = pc;
+
+      // AI audio output
+      const audio = new Audio();
+      audio.autoplay = true;
+      audioRef.current = audio;
+      pc.ontrack = (e) => { audio.srcObject = e.streams[0]; };
+
+      // Mic input — echo cancellation prevents AI from hearing itself
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 24000,
+        },
+      });
+      streamRef.current = stream;
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+
+      // Events data channel
+      const dc = pc.createDataChannel("oai-events");
+      dcRef.current = dc;
+      dc.onmessage = (e) => {
+        try { handleServerEvent(JSON.parse(e.data)); } catch {}
+      };
+      dc.onopen = () => {
+        setVoiceStatus("listening");
+        setIsListening(true);
+      };
+
+      // Only auto-reconnect if disconnect was NOT intentional
+      pc.onconnectionstatechange = () => {
+        if (
+          !manualStop.current &&
+          (pc.connectionState === "disconnected" || pc.connectionState === "failed")
+        ) {
+          pcRef.current = null;
+          setTimeout(() => connect(), 2000);
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdpRes = await fetch(
+        "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ephemeralKey}`,
+            "Content-Type": "application/sdp",
+          },
+          body: offer.sdp,
+        }
+      );
+
+      if (!sdpRes.ok) {
+        pcRef.current = null;
+        return;
+      }
+
+      const answerSdp = await sdpRes.text();
+      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+    } catch (err) {
+      console.error("Realtime connect error:", err);
+      pcRef.current = null;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleServerEvent]);
+
+  // Auto-connect on mount; fully disconnect on unmount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      manualStop.current = false;
-      startListening();
-    }, 800);
+    const timer = setTimeout(() => connect(), 800);
     return () => {
       clearTimeout(timer);
-      if (restartTimer.current) clearTimeout(restartTimer.current);
-      manualStop.current = true;
-      recognitionRef.current?.stop();
-      window.speechSynthesis?.cancel();
+      disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Public controls ───────────────────────────────────────────────────────
+  const startListening = useCallback(() => connect(), [connect]);
+  const stopListening  = useCallback(() => disconnect(), [disconnect]);
+
+  const toggleListening = useCallback(() => {
+    if (isListening || voiceStatus === "thinking" || voiceStatus === "speaking") {
+      disconnect();
+    } else {
+      connect();
+    }
+  }, [isListening, voiceStatus, connect, disconnect]);
 
   return (
     <VoiceContext.Provider

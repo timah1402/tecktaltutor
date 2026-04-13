@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
+import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import { ChevronRight } from "lucide-react";
 import { useVoice } from "../providers/VoiceProvider";
@@ -84,7 +85,7 @@ export default function ResponseSheet() {
           ) : aiResponse ? (
             <div className="prose-response animate-fade-in">
               <ReactMarkdown
-                remarkPlugins={[remarkMath]}
+                remarkPlugins={[remarkMath, remarkGfm]}
                 rehypePlugins={[rehypeKatex]}
               >
                 {aiResponse}

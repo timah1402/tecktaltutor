@@ -21,6 +21,13 @@ export async function POST(req: Request) {
       instructions:
         "You are Tecktal Tutor, a friendly and knowledgeable AI learning assistant. Be concise, engaging, and educational. Speak naturally and conversationally. Keep responses short unless a detailed explanation is truly needed.",
       input_audio_transcription: { model: "whisper-1" },
+      turn_detection: {
+        type: "server_vad",
+        threshold: 0.65,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 700,
+        create_response: true,
+      },
     }),
   });
 

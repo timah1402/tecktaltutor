@@ -62,6 +62,11 @@ module.exports = {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
         },
+        "slide-up": {
+          "0%": { transform: "translateY(100%)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+
       },
       animation: {
         "bar-wave": "bar-wave 0.9s ease-in-out infinite",
@@ -75,6 +80,7 @@ module.exports = {
         "spin-slow": "spin-slow 3s linear infinite",
         "command-pop": "command-pop 2.2s ease-in-out forwards",
         "fade-in": "fade-in 0.3s ease-out forwards",
+        "slide-up": "slide-up 0.35s cubic-bezier(0.32,0.72,0,1) forwards",
       },
       backdropBlur: {
         xs: "4px",

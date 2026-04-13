@@ -11,7 +11,7 @@ type Message = { id: string; role: "user" | "assistant"; text: string };
 const VOICES = ["alloy", "echo", "shimmer", "nova", "onyx", "fable", "coral"] as const;
 type Voice = (typeof VOICES)[number];
 
-export default function VoicePage() {
+export default function VoicePage({ isEmbedded = false }: { isEmbedded?: boolean }) {
   const [status, setStatus] = useState<Status>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -161,8 +161,7 @@ export default function VoicePage() {
 
   const orbActive = isConnected && (isSpeaking || isUserSpeaking);
 
-  return (
-    <AppShell>
+  const _inner = (
       <div className="flex flex-col items-center px-4 pt-4 pb-6 gap-5 animate-fade-up">
 
         {/* Title */}
@@ -390,6 +389,7 @@ export default function VoicePage() {
           </div>
         )}
       </div>
-    </AppShell>
   );
+  if (isEmbedded) return _inner;
+  return <AppShell>{_inner}</AppShell>;
 }
