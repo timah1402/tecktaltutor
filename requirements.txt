@@ -28,7 +28,7 @@ brotli>=1.1.0              # For decompressing brotli-encoded HTTP responses
 # ============================================
 # Async support
 # ============================================
-nest_asyncio>=1.5.8
+nest_asyncio>=1.6.0
 tenacity>=8.0.0
 
 # ============================================
