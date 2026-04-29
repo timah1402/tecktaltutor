@@ -1,15 +1,16 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send, Loader2, Bot, User, CheckCircle2, Activity,
   Cpu, DollarSign, Terminal, Search, Sparkles, FileText,
-  Trash2, Book, ChevronRight, ChevronLeft,
+  Trash2, Book, ChevronRight, ChevronLeft, Zap,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import AppShell from "../components/AppShell";
+import { usePageAction } from "../providers/NavigationProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -108,74 +109,199 @@ export default function SolverPage({ isEmbedded = false }: { isEmbedded?: boolea
   const [tokenStats, setTokenStats]     = useState({ calls: 0, tokens: 0, cost: 0 });
   const [selectedKb, setSelectedKb]     = useState(MOCK_KB[0]);
   const [logPanelOpen, setLogPanelOpen] = useState(true);
+  const [agentSubmitted, setAgentSubmitted] = useState<string | null>(null); // tracks agent-driven submissions
 
   const chatEndRef    = useRef<HTMLDivElement>(null);
   const logEndRef     = useRef<HTMLDivElement>(null);
+  const solveWsRef    = useRef<WebSocket | null>(null);
+  const sessionIdRef  = useRef<string | null>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isSolving]);
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
 
+  // Close solver WS on unmount
+  useEffect(() => () => { solveWsRef.current?.close(); }, []);
+
   const resetAgents = () =>
     setAgentStatus(Object.fromEntries(AGENT_NAMES.map(n => [n, "idle"])) as Record<AgentName, AgentStatus>);
 
-  const handleSend = async (q?: string) => {
+  // ── Real WebSocket solve ──────────────────────────────────────────────────
+  const handleSend = useCallback(async (q?: string) => {
     const question = q ?? input.trim();
     if (!question || isSolving) return;
+
     setInput("");
     setMessages(prev => [...prev, { role: "user", content: question }]);
     setIsSolving(true);
     setLogs([]);
+    setStage("investigate");
     resetAgents();
     setTokenStats({ calls: 0, tokens: 0, cost: 0 });
 
-    // Simulate log stream
-    const delays = [200, 500, 900, 1200, 1600, 2000, 2400, 2800, 3200, 3600, 3900];
-    MOCK_LOGS.forEach((log, i) => {
-      setTimeout(() => {
-        setLogs(prev => [...prev, log]);
+    // Close any existing solve WS
+    solveWsRef.current?.close();
 
-        // Update stage
-        if (log.content.includes("[Stage: investigate]")) setStage("investigate");
-        if (log.content.includes("[Stage: solve]"))       setStage("solve");
-        if (log.content.includes("[Stage: response]"))    setStage("response");
+    const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT ?? "8001";
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl    = `${protocol}://localhost:${BACKEND_PORT}/api/v1/solve`;
+    const ws       = new WebSocket(wsUrl);
+    solveWsRef.current = ws;
 
-        // Update agent status
-        if (log.content.includes("InvestigateAgent")) {
-          const s: AgentStatus = log.content.includes("✔") ? "done" : "running";
-          setAgentStatus(prev => ({ ...prev, InvestigateAgent: s }));
-        }
-        if (log.content.includes("SolveAgent")) {
-          const s: AgentStatus = log.content.includes("✔") ? "done" : "running";
-          setAgentStatus(prev => ({ ...prev, SolveAgent: s }));
-        }
-        if (log.content.includes("ResponseAgent")) {
-          const s: AgentStatus = log.content.includes("✔") ? "done" : "running";
-          setAgentStatus(prev => ({ ...prev, ResponseAgent: s }));
-        }
-        if (log.content.includes("Tool Call")) {
-          setAgentStatus(prev => ({ ...prev, ToolAgent: "running" }));
-          setTimeout(() => setAgentStatus(prev => ({ ...prev, ToolAgent: "done" })), 600);
-        }
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        question,
+        kb_name: selectedKb.toLowerCase().replace(/ /g, "_") || "ai_textbook",
+        session_id: sessionIdRef.current ?? undefined,
+      }));
+    };
 
-        // Mock token stats update
-        setTokenStats({ calls: i + 1, tokens: (i + 1) * 180, cost: (i + 1) * 0.00018 });
-      }, delays[i] ?? i * 350);
-    });
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
 
-    // Final answer
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: "assistant", content: MOCK_ANSWER }]);
+        switch (msg.type) {
+          case "session":
+            sessionIdRef.current = msg.session_id;
+            break;
+
+          case "status":
+            if (msg.content === "started") setStage("investigate");
+            break;
+
+          case "agent_status": {
+            // msg.all_agents: { InvestigateAgent: "running", ... }
+            const map: Record<string, string> = msg.all_agents ?? {};
+            setAgentStatus(prev => {
+              const next = { ...prev };
+              for (const [name, status] of Object.entries(map)) {
+                if (name in next) next[name as AgentName] = status as AgentStatus;
+              }
+              return next;
+            });
+            // Derive stage from agent
+            if (map["InvestigateAgent"] === "running") setStage("investigate");
+            else if (map["SolveAgent"] === "running")  setStage("solve");
+            else if (map["ResponseAgent"] === "running") setStage("response");
+            break;
+          }
+
+          case "token_stats": {
+            const s = msg.stats ?? {};
+            setTokenStats({
+              calls:  s.calls  ?? 0,
+              tokens: (s.input_tokens ?? 0) + (s.output_tokens ?? 0),
+              cost:   s.cost   ?? 0,
+            });
+            break;
+          }
+
+          case "progress": {
+            // Update the stage indicator
+            if (msg.stage === "investigate") setStage("investigate");
+            else if (msg.stage === "solve")  setStage("solve");
+            else if (msg.stage === "response") setStage("response");
+
+            // Format a readable log entry from the nested progress object
+            let content: string = msg.content ?? msg.message ?? "";
+            if (!content && msg.progress) {
+              const p = msg.progress as Record<string, unknown>;
+              if (Array.isArray(p.queries) && p.queries.length) {
+                content = `▶ [${msg.stage}] Querying: ${(p.queries as string[]).join(", ")}`;
+              } else if (p.step_id) {
+                const target = typeof p.step_target === "string"
+                  ? p.step_target.slice(0, 90)
+                  : String(p.step_id);
+                content = `--- Step ${p.step_index}: ${target}`;
+              } else if (p.round !== undefined) {
+                content = `▶ [${msg.stage}] Analysis round ${p.round}`;
+              } else {
+                content = `▶ [${msg.stage}] ${JSON.stringify(p)}`;
+              }
+            }
+            if (!content) break;
+            const logType: LogType =
+              msg.stage === "solve" ? "step" : "progress";
+            setLogs(prev => [...prev, { type: logType, content }]);
+            break;
+          }
+
+          case "log": {
+            // Raw logger output from LogInterceptor
+            const raw: string = msg.content ?? msg.message ?? "";
+            if (!raw) break;
+            const logType: LogType =
+              raw.toLowerCase().includes("error") ? "error" :
+              raw.includes("Tool") || raw.includes("tool") ? "tool" :
+              raw.includes("Step") || raw.includes("---")  ? "step" :
+              raw.includes("▶") || raw.includes("✔")       ? "progress" : "system";
+            setLogs(prev => [...prev, { type: logType, content: raw }]);
+            break;
+          }
+
+          case "result":
+            setMessages(prev => [...prev, {
+              role: "assistant",
+              content: msg.final_answer ?? "No answer returned.",
+            }]);
+            setIsSolving(false);
+            setStage(null);
+            setAgentSubmitted(null);
+            setAgentStatus(prev => Object.fromEntries(
+              Object.keys(prev).map(k => [k, "done"])
+            ) as Record<AgentName, AgentStatus>);
+            ws.close();
+            break;
+
+          case "error":
+            setMessages(prev => [...prev, {
+              role: "assistant",
+              content: `**Error:** ${msg.content}`,
+            }]);
+            setIsSolving(false);
+            setStage(null);
+            setAgentSubmitted(null);
+            ws.close();
+            break;
+        }
+      } catch { /* ignore parse errors */ }
+    };
+
+    ws.onerror = () => {
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "**Connection error.** Could not reach the solver backend.",
+      }]);
       setIsSolving(false);
       setStage(null);
-      setAgentStatus(prev => ({ ...prev, NoteAgent: "done" }));
-    }, 4200);
-  };
+      setAgentSubmitted(null);
+    };
+
+    ws.onclose = () => {
+      // If closed while still solving (e.g. network drop)
+      setIsSolving(prev => { if (prev) { setStage(null); } return false; });
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSolving, input, selectedKb]);
+
+  // Subscribe to agent page_action events
+  usePageAction("solver", (evt) => {
+    if (evt.action === "submit" && evt.data.problem) {
+      const problem = evt.data.problem as string;
+      setAgentSubmitted(problem);
+      setInput(problem);
+      // Small delay so the user can see the input appear before it submits
+      setTimeout(() => handleSend(problem), 600);
+    }
+  });
 
   const handleNew = () => {
+    solveWsRef.current?.close();
+    solveWsRef.current = null;
     setMessages([]);
     setLogs([]);
     setIsSolving(false);
     setStage(null);
+    setAgentSubmitted(null);
     resetAgents();
     setTokenStats({ calls: 0, tokens: 0, cost: 0 });
   };
@@ -197,6 +323,12 @@ export default function SolverPage({ isEmbedded = false }: { isEmbedded?: boolea
               {sl && (
                 <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${sl.color}`}>
                   {sl.icon}{sl.label}
+                </span>
+              )}
+              {/* Agent-submitted badge */}
+              {agentSubmitted && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium text-violet-700 bg-violet-50 border border-violet-200">
+                  <Zap className="w-3 h-3" />Agent
                 </span>
               )}
             </div>

@@ -10,6 +10,7 @@ import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import AppShell from "../components/AppShell";
+import { usePageAction } from "../providers/NavigationProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -259,6 +260,16 @@ export default function GuidePage({ isEmbedded = false }: { isEmbedded?: boolean
     setLessonIdx(0);
     setChatMessages([]);
   };
+
+  // ── Agent-driven session start via SSE page_action ────────────────────────
+  usePageAction("guide", (evt) => {
+    if (evt.action === "start") {
+      // If already in a session, reset first
+      if (status !== "idle") reset();
+      // Start with a short delay so reset flushes
+      setTimeout(startSession, status !== "idle" ? 200 : 0);
+    }
+  });
 
   const askQuestion = async () => {
     const q = chatInput.trim();

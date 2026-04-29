@@ -11,6 +11,7 @@ import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import AppShell from "../components/AppShell";
+import { usePageAction } from "../providers/NavigationProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,19 @@ export default function QuestionPage({ isEmbedded = false }: { isEmbedded?: bool
       setStep("result");
     }, 1800);
   };
+
+  // ── Agent-driven generation via SSE page_action ───────────────────────────
+  usePageAction("question", (evt) => {
+    if (evt.action === "generate" && evt.data.topic) {
+      const agentTopic = evt.data.topic as string;
+      const diff = evt.data.difficulty as Difficulty | undefined;
+      if (diff && ["Easy","Medium","Hard"].includes(diff)) setDifficulty(diff);
+      setTopic(agentTopic);
+      setMode("knowledge");
+      // Delay so topic state is flushed before generate reads it
+      setTimeout(handleGenerate, 300);
+    }
+  });
 
   const handleReset = () => {
     setStep("config"); setQuestions([]); setAnswers({});

@@ -240,7 +240,7 @@ def start_backend():
 def start_frontend():
     print_flush("🚀 Starting Next.js Frontend...")
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    web_dir = os.path.join(project_root, "web")
+    web_dir = os.path.join(project_root, "web1")
 
     # Ensure project root is in Python path
     if project_root not in sys.path:

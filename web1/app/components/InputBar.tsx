@@ -10,7 +10,7 @@ type AttachedFile = {
 };
 
 export default function InputBar() {
-  const { showInput, setShowInput, toggleListening, isListening, voiceStatus, sendTextMessage } = useVoice();
+  const { showInput, setShowInput, toggleListening, isListening, voiceStatus, sendTextMessage, cancelRequest } = useVoice();
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,18 +102,18 @@ export default function InputBar() {
 
           {/* Input row */}
           <div
-            className="flex items-center gap-2 px-3 py-2.5 rounded-2xl"
+            className="flex items-center gap-2 px-3 py-2 rounded-2xl"
             style={{
-              background: "rgba(255,255,255,0.78)",
+              background: "rgba(255,255,255,0.85)",
               boxShadow: "0 4px 20px rgba(100,130,200,0.1), inset 0 1px 0 rgba(255,255,255,0.9)",
-              border: "1px solid rgba(255,255,255,0.9)",
+              border: "1px solid rgba(200,220,255,0.55)",
             }}
           >
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center hover:bg-blue-50 transition-colors"
+              className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center hover:bg-blue-50 transition-colors"
             >
-              <Paperclip size={16} className="text-slate-400" />
+              <Paperclip size={15} className="text-slate-400" />
             </button>
             <input
               ref={textRef}
@@ -125,16 +125,36 @@ export default function InputBar() {
                 if (e.key === "Escape") setShowInput(false);
               }}
               placeholder="Type your message…"
-              className="flex-1 bg-transparent outline-none text-sm text-slate-700 placeholder:text-slate-400"
+              className="flex-1 bg-transparent outline-none text-sm text-slate-700 placeholder:text-slate-400 py-1"
             />
-            <button
-              onClick={handleSend}
-              disabled={!text.trim() && attachments.length === 0}
-              className="shrink-0 w-8 h-8 rounded-xl flex items-center justify-center disabled:opacity-30 transition-all"
-              style={{ background: "linear-gradient(135deg, #4f8ef7, #6366f1)" }}
-            >
-              <Send size={14} className="text-white" />
-            </button>
+            {isThinking ? (
+              // Stop button
+              <button
+                onClick={cancelRequest}
+                className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all"
+                style={{
+                  background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                  boxShadow: "0 2px 8px rgba(239,68,68,0.45)",
+                  animation: "pulse 1.5s infinite",
+                }}
+                title="Stop"
+              >
+                <div className="w-2.5 h-2.5 rounded-sm bg-white" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!text.trim() && attachments.length === 0}
+                className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all active:scale-95"
+                style={
+                  text.trim() || attachments.length > 0
+                    ? { background: "linear-gradient(135deg, #4f8ef7, #6366f1)", boxShadow: "0 2px 8px rgba(79,142,247,0.4)" }
+                    : { background: "rgba(200,215,240,0.6)" }
+                }
+              >
+                <Send size={13} className={text.trim() || attachments.length > 0 ? "text-white" : "text-slate-400"} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -155,19 +175,25 @@ export default function InputBar() {
           <Keyboard size={20} className={showInput ? "text-white" : "text-slate-400"} />
         </button>
 
-        {/* Mic button */}
+        {/* Mic / Stop button */}
         <button
-          onClick={toggleListening}
+          onClick={isThinking ? cancelRequest : toggleListening}
           className="w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300"
           style={{
-            background: "linear-gradient(135deg, #4f8ef7, #6366f1)",
-            boxShadow: isListening
+            background: isThinking
+              ? "linear-gradient(135deg, #ef4444, #dc2626)"
+              : "linear-gradient(135deg, #4f8ef7, #6366f1)",
+            boxShadow: isThinking
+              ? "0 0 0 6px rgba(239,68,68,0.2), 0 6px 20px rgba(239,68,68,0.4)"
+              : isListening
               ? "0 0 0 6px rgba(79,142,247,0.2), 0 0 0 12px rgba(79,142,247,0.08), 0 6px 20px rgba(79,142,247,0.45)"
               : "0 4px 16px rgba(79,142,247,0.4)",
           }}
-          title={isListening ? "Stop listening" : "Start listening"}
+          title={isThinking ? "Stop" : isListening ? "Stop listening" : "Start listening"}
         >
-          {isListening || isThinking ? (
+          {isThinking ? (
+            <div className="w-5 h-5 rounded-sm bg-white" />
+          ) : isListening ? (
             <MicOff size={26} className="text-white" />
           ) : (
             <Mic size={26} className="text-white" />

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src.api.routers import (
+    agent,
     agent_config,
     chat,
     co_writer,
@@ -19,6 +20,7 @@ from src.api.routers import (
     research,
     settings,
     solve,
+    sse,
     system,
 )
 from src.logging import get_logger
@@ -201,6 +203,8 @@ app.include_router(settings.router, prefix="/api/v1/settings", tags=["settings"]
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(config.router, prefix="/api/v1/config", tags=["config"])
 app.include_router(agent_config.router, prefix="/api/v1/agent-config", tags=["agent-config"])
+app.include_router(sse.router, prefix="/api/v1", tags=["sse"])
+app.include_router(agent.router, prefix="/api/v1", tags=["agent"])
 
 
 @app.get("/")
@@ -236,8 +240,8 @@ if __name__ == "__main__":
             venv_dir,
             project_root / ".venv",
             data_dir,
-            project_root / "web" / "node_modules",
-            project_root / "web" / ".next",
+            project_root / "web1" / "node_modules",
+            project_root / "web1" / ".next",
             project_root / ".git",
         ]
         if d.exists()

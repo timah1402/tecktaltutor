@@ -4,13 +4,14 @@ import {
   Microscope, Database, Globe, GraduationCap, Sparkles, Send,
   Bot, User, Loader2, CheckCircle2, Download, FileText,
   BarChart3, Clock, Play, Settings, ChevronLeft, ChevronRight,
-  BookOpen, Activity,
+  BookOpen, Activity, Zap,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import AppShell from "../components/AppShell";
+import { usePageAction } from "../providers/NavigationProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,25 @@ export default function ResearchPage({ isEmbedded = false }: { isEmbedded?: bool
   const reportRef   = useRef<HTMLDivElement>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMsgs]);
+
+  // ── Agent-driven research via SSE page_action ─────────────────────────────
+  usePageAction("research", (evt) => {
+    if (evt.action === "start" && evt.data.topic) {
+      const topic = evt.data.topic as string;
+      const mode  = (evt.data.mode as string) ?? "auto";
+      if (mode !== "auto") setPlanMode(mode as PlanMode);
+      // Add as user message so the student sees what was submitted
+      setChatMsgs(prev => [
+        ...prev,
+        { id: Date.now().toString(), role: "user", content: topic },
+        { id: (Date.now() + 1).toString(), role: "assistant",
+          content: `Starting research on **${topic}**\u2026`,
+          proposal: topic },
+      ]);
+      // Slight delay so the panel animation completes first
+      setTimeout(() => startResearch(topic), 800);
+    }
+  });
 
   const toggleTool = (key: ToolKey) => {
     setTools(prev => {

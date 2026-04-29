@@ -1,0 +1,26 @@
+# ============================================
+# Frontend (web1) Docker Ignore
+# ============================================
+# Exclude heavy local build artifacts — these are
+# always rebuilt fresh inside the container.
+
+# Dependencies (reinstalled via npm ci)
+node_modules/
+
+# Previous build output (rebuilt via npm run build)
+.next/
+out/
+
+# Local env files (secrets must be passed via Coolify env vars)
+.env.local
+.env*.local
+*.env
+
+# Dev/IDE files
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# TypeScript build cache (not needed in image)
+tsconfig.tsbuildinfo

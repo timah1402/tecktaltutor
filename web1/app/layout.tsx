@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 // @ts-ignore
 import "katex/dist/katex.min.css";
+import { NavigationProvider } from "./providers/NavigationProvider";
 import { VoiceProvider } from "./providers/VoiceProvider";
 
 const font = Inter({ subsets: ["latin"], display: "swap" });
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className={font.className}>
-        <VoiceProvider>{children}</VoiceProvider>
+        <NavigationProvider>
+          <VoiceProvider>{children}</VoiceProvider>
+        </NavigationProvider>
       </body>
     </html>
   );

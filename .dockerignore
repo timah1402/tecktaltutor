@@ -71,19 +71,22 @@ htmlcov/
 dmypy.json
 
 # ============================================
-# Node.js
+# Node.js / Frontend (not needed for backend image)
 # ============================================
+web1/
+web/
 node_modules/
 **/node_modules/
-web/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Next.js
+# Next.js build artifacts
 .next/
+web1/.next/
 web/.next/
 out/
+web1/out/
 web/out/
 
 # ============================================

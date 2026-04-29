@@ -1,0 +1,113 @@
+# ============================================
+# DeepTutor Backend Dockerfile
+# ============================================
+# Stage 1: Python Base with Dependencies
+# ============================================
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=1000 \
+    PIP_RETRIES=10
+
+WORKDIR /app
+
+# Install system dependencies (Rust is needed for some python packages like tiktoken)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+COPY requirements.txt ./
+# Install CPU-only torch FIRST to prevent pip from downloading the massive 530MB CUDA build.
+# raganything/docling pull torch as a transitive dep — without this, pip resolves to the
+# GPU (CUDA) wheel which is ~530MB and frequently drops on slow connections.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install -r requirements.txt
+
+# ============================================
+# Stage 2: Production Image
+# ============================================
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8 \
+    BACKEND_PORT=8001
+
+WORKDIR /app
+
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    bash \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application source code
+COPY src/ ./src/
+COPY config/ ./config/
+COPY scripts/ ./scripts/
+COPY pyproject.toml ./
+COPY requirements.txt ./
+
+# Create necessary directories
+RUN mkdir -p \
+    data/user/solve \
+    data/user/question \
+    data/user/research/cache \
+    data/user/research/reports \
+    data/user/guide \
+    data/user/notebook \
+    data/user/co-writer/audio \
+    data/user/co-writer/tool_calls \
+    data/user/logs \
+    data/user/run_code_workspace \
+    data/user/performance \
+    data/knowledge_bases
+
+# Create entrypoint script
+RUN echo '#!/bin/bash\n\
+    set -e\n\
+    echo "🚀 Starting DeepTutor Backend"\n\
+    export BACKEND_PORT=${BACKEND_PORT:-8001}\n\
+    if [ -z "$LLM_API_KEY" ]; then\n\
+    echo "⚠️ Warning: LLM_API_KEY not set"\n\
+    fi\n\
+    if [ ! -f "/app/data/user/user_history.json" ]; then\n\
+    echo "📁 Initializing user data directories..."\n\
+    python -c "from pathlib import Path; from src.services.setup import init_user_directories; init_user_directories(Path('\'/app\''))" 2>/dev/null || echo "⚠️ Skipped"\n\
+    fi\n\
+    exec python -m uvicorn src.api.main:app --host 0.0.0.0 --port ${BACKEND_PORT}\n\
+    ' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${BACKEND_PORT}/ || exit 1
+
+ENTRYPOINT ["/app/entrypoint.sh"]

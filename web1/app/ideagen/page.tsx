@@ -9,6 +9,7 @@ import remarkMath from "remark-math";
 import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import AppShell from "../components/AppShell";
+import { usePageAction } from "../providers/NavigationProvider";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -271,6 +272,16 @@ export default function IdeaGenPage({ isEmbedded = false }: { isEmbedded?: boole
     setGenerating(false);
     setGenStatus("Completed!");
   };
+
+  // ── Agent-driven generation via SSE page_action ───────────────────────────
+  usePageAction("ideagen", (evt) => {
+    if (evt.action === "generate" && evt.data.topic) {
+      const agentTopic = evt.data.topic as string;
+      setThoughts(agentTopic);
+      // Delay so thoughts state is flushed
+      setTimeout(generate, 400);
+    }
+  });
 
   const toggleExpand = (id: string) =>
     setIdeas(p => p.map(idea => idea.id === id ? { ...idea, expanded: !idea.expanded } : idea));
