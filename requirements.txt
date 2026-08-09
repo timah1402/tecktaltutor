@@ -65,7 +65,7 @@ numpy>=1.24.0,<2.0.0  # NumPy 1.24+ required for array API, <2.0 for compatibili
 # pandas>=2.0.0      # Uncomment if needed for data analysis
 
 # PDF parsing
-PyMuPDF>=1.26.0      # For PDF text extraction (fast and reliable)
+PyMuPDF>=1.27.2.3      # For PDF text extraction (fast and reliable)
 
 # Vector search (optional but recommended for llamaindex pipeline)
 # faiss-cpu>=1.7.4   # Uncomment for CPU-only FAISS support (faster search)
